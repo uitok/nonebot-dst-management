@@ -4,6 +4,7 @@ DMP API 客户端
 提供与 DMP (DST Management Platform) API v3 交互的异步客户端。
 """
 
+import os
 from typing import Any, Dict, List, Optional
 from loguru import logger
 import httpx
@@ -225,6 +226,97 @@ class DSTApiClient:
             "roomID": room_id,
             "filename": filename
         })
+
+    # ========== 存档管理 ==========
+
+    async def upload_archive(self, room_id: int, archive_path: str) -> Dict[str, Any]:
+        """上传房间存档"""
+        return await self._upload_archive("/tools/archive/upload", room_id, archive_path)
+
+    async def replace_archive(self, room_id: int, archive_path: str) -> Dict[str, Any]:
+        """替换房间存档"""
+        return await self._upload_archive("/tools/archive/replace", room_id, archive_path)
+
+    async def download_archive(self, room_id: int) -> Dict[str, Any]:
+        """下载房间存档"""
+        try:
+            async with httpx.AsyncClient(
+                base_url=f"{self.base_url}/v3",
+                headers={"X-DMP-TOKEN": self.token},
+                timeout=self.timeout,
+            ) as client:
+                response = await client.get("/tools/archive/download", params={"roomID": room_id})
+
+            content_type = response.headers.get("content-type", "")
+            if "application/json" in content_type:
+                result = response.json()
+                if result.get("code") == 200:
+                    return {
+                        "success": True,
+                        "data": result.get("data"),
+                        "message": result.get("message", "success"),
+                    }
+                return {
+                    "success": False,
+                    "error": result.get("message", "Unknown error"),
+                    "code": result.get("code"),
+                }
+
+            filename = response.headers.get("content-disposition", "")
+            return {
+                "success": True,
+                "data": {
+                    "filename": filename,
+                    "content": response.content,
+                },
+            }
+        except httpx.TimeoutException:
+            logger.error("请求超时: /tools/archive/download")
+            return {"success": False, "error": "请求超时", "code": 408}
+        except httpx.RequestError as e:
+            logger.error(f"请求错误: {e}")
+            return {"success": False, "error": str(e), "code": 500}
+        except Exception as e:
+            logger.exception(f"未知错误: {e}")
+            return {"success": False, "error": str(e), "code": 500}
+
+    async def _upload_archive(self, path: str, room_id: int, archive_path: str) -> Dict[str, Any]:
+        try:
+            filename = os.path.basename(archive_path)
+            async with httpx.AsyncClient(
+                base_url=f"{self.base_url}/v3",
+                headers={"X-DMP-TOKEN": self.token},
+                timeout=self.timeout,
+            ) as client:
+                with open(archive_path, "rb") as file_handle:
+                    files = {"file": (filename, file_handle, "application/zip")}
+                    data = {"roomID": str(room_id)}
+                    response = await client.post(path, data=data, files=files)
+
+            result = response.json()
+            if result.get("code") == 200:
+                return {
+                    "success": True,
+                    "data": result.get("data"),
+                    "message": result.get("message", "success"),
+                }
+            return {
+                "success": False,
+                "error": result.get("message", "Unknown error"),
+                "code": result.get("code"),
+            }
+
+        except FileNotFoundError:
+            return {"success": False, "error": "存档文件不存在", "code": 404}
+        except httpx.TimeoutException:
+            logger.error(f"请求超时: {path}")
+            return {"success": False, "error": "请求超时", "code": 408}
+        except httpx.RequestError as e:
+            logger.error(f"请求错误: {e}")
+            return {"success": False, "error": str(e), "code": 500}
+        except Exception as e:
+            logger.exception(f"未知错误: {e}")
+            return {"success": False, "error": str(e), "code": 500}
 
     # ========== 控制台命令 ==========
 
