@@ -209,6 +209,155 @@ class DSTApiClient:
             "message": "success",
         }
 
+    # ========== 模组管理 ==========
+
+    async def search_mod(self, type: str, keyword: str) -> Dict[str, Any]:
+        """
+        搜索模组
+
+        使用 DMP API v3 的模组搜索接口，支持文本、ID 或热门搜索。
+
+        Args:
+            type: 搜索类型（text/id/hot）
+            keyword: 搜索关键词（text/id 模式必填，hot 可为空）
+
+        Returns:
+            {
+                "success": True/False,
+                "data": [...],  # 模组列表
+                "error": "错误信息"
+            }
+        """
+        search_type = (type or "").strip().lower()
+        if search_type not in {"text", "id", "hot"}:
+            return {"success": False, "error": "不支持的搜索类型", "code": 400}
+        if search_type in {"text", "id"} and not (keyword or "").strip():
+            return {"success": False, "error": "搜索关键词不能为空", "code": 400}
+
+        params: Dict[str, Any] = {"type": search_type}
+        if keyword:
+            params["keyword"] = keyword
+
+        return await self._request("GET", "/mod/search", params=params)
+
+    async def download_mod(self, mod_id: str) -> Dict[str, Any]:
+        """
+        下载模组到服务器
+
+        使用 DMP API v3 的模组下载接口，将指定 workshop 模组下载到服务器。
+
+        Args:
+            mod_id: 模组 ID（workshop-数字）
+
+        Returns:
+            {
+                "success": True/False,
+                "data": {"path": "..."},
+                "error": "错误信息"
+            }
+        """
+        mod_id = (mod_id or "").strip()
+        if mod_id.isdigit():
+            mod_id = f"workshop-{mod_id}"
+        if not re.fullmatch(r"workshop-\d+", mod_id):
+            return {"success": False, "error": "无效的模组ID", "code": 400}
+
+        return await self._request("POST", "/mod/download", data={"modID": mod_id})
+
+    async def get_mod_setting_struct(self, mod_id: str) -> Dict[str, Any]:
+        """
+        获取模组配置结构
+
+        使用 DMP API v3 的模组配置结构接口，返回可用配置项定义。
+
+        Args:
+            mod_id: 模组 ID（workshop-数字）
+
+        Returns:
+            {
+                "success": True/False,
+                "data": {...},  # 配置结构
+                "error": "错误信息"
+            }
+        """
+        mod_id = (mod_id or "").strip()
+        if mod_id.isdigit():
+            mod_id = f"workshop-{mod_id}"
+        if not re.fullmatch(r"workshop-\d+", mod_id):
+            return {"success": False, "error": "无效的模组ID", "code": 400}
+
+        return await self._request("GET", "/mod/setting/struct", params={"modID": mod_id})
+
+    async def update_mod_setting(
+        self,
+        room_id: int,
+        world_id: str,
+        mod_id: str,
+        config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        更新模组配置
+
+        使用 DMP API v3 的模组配置更新接口，按房间/世界维度更新模组配置。
+
+        Args:
+            room_id: 房间 ID
+            world_id: 世界 ID
+            mod_id: 模组 ID（workshop-数字）
+            config: 配置数据（Dict）
+
+        Returns:
+            {
+                "success": True/False,
+                "error": "错误信息"
+            }
+        """
+        mod_id = (mod_id or "").strip()
+        if mod_id.isdigit():
+            mod_id = f"workshop-{mod_id}"
+        if not re.fullmatch(r"workshop-\d+", mod_id):
+            return {"success": False, "error": "无效的模组ID", "code": 400}
+        if world_id is None or str(world_id).strip() == "":
+            return {"success": False, "error": "世界ID不能为空", "code": 400}
+        if not isinstance(config, dict):
+            return {"success": False, "error": "配置数据必须是字典", "code": 400}
+
+        data = {
+            "roomID": room_id,
+            "worldID": world_id,
+            "modID": mod_id,
+            "config": config,
+        }
+        return await self._request("POST", "/room/mod/setting/update", data=data)
+
+    async def enable_mod(self, room_id: int, world_id: str, mod_id: str) -> Dict[str, Any]:
+        """
+        启用模组
+
+        使用 DMP API v3 的模组启用接口，在指定房间/世界启用模组。
+
+        Args:
+            room_id: 房间 ID
+            world_id: 世界 ID
+            mod_id: 模组 ID（workshop-数字）
+
+        Returns:
+            {
+                "success": True/False,
+                "error": "错误信息"
+            }
+        """
+        mod_id = (mod_id or "").strip()
+        if mod_id.isdigit():
+            mod_id = f"workshop-{mod_id}"
+        if not re.fullmatch(r"workshop-\d+", mod_id):
+            return {"success": False, "error": "无效的模组ID", "code": 400}
+        if world_id is None or str(world_id).strip() == "":
+            return {"success": False, "error": "世界ID不能为空", "code": 400}
+
+        data = {"roomID": room_id, "worldID": world_id, "modID": mod_id}
+        return await self._request("POST", "/room/mod/enable", data=data)
+
     # ========== 玩家管理 ==========
 
     async def get_online_players(self, room_id: int) -> Dict[str, Any]:
