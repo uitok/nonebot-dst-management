@@ -18,6 +18,10 @@ from .base import (
 )
 from .client import AIClient, ClaudeProvider, MockProvider, OllamaProvider, OpenAIProvider
 from .analyzer import ServerConfigAnalyzer
+from .archive_analyzer import ArchiveAnalyzer
+from .mod_parser import ModConfigParser
+from .qa import QASystem
+from .recommender import ModRecommender
 from .config import AIConfig
 
 __all__ = [
@@ -37,5 +41,9 @@ __all__ = [
     "OllamaProvider",
     "OpenAIProvider",
     "ServerConfigAnalyzer",
+    "ArchiveAnalyzer",
+    "ModConfigParser",
+    "QASystem",
+    "ModRecommender",
     "AIConfig",
 ]

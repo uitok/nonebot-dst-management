@@ -40,6 +40,11 @@ __plugin_meta__ = PluginMetadata(
 
 AI 功能：
   /dst analyze <房间ID>         - AI 配置分析
+  /dst mod recommend <房间ID> [类型] - AI 模组推荐
+  /dst mod parse <房间ID> <世界ID> - AI 模组配置解析
+  /dst mod config save <房间ID> <世界ID> --optimized - 保存优化配置 🔒
+  /dst archive analyze <文件>    - AI 存档分析
+  /dst ask <问题>                - AI 智能问答
 
 控制台：
   /dst console <房间ID> [世界ID] <命令> - 执行控制台命令 🔒
@@ -79,15 +84,31 @@ async def init_client():
     _ai_client = AIClient(config.get_ai_config())
     
     # 加载命令处理器
-    from .handlers import room, player, backup, mod, console, archive, ai_analyze
+    from .handlers import (
+        room,
+        player,
+        backup,
+        mod,
+        console,
+        archive,
+        ai_analyze,
+        ai_recommend,
+        ai_mod_parse,
+        ai_archive,
+        ai_qa,
+    )
     
     room.init(_api_client)
     player.init(_api_client)
     backup.init(_api_client)
-    mod.init(_api_client)
+    mod.init(_api_client, _ai_client)
     console.init(_api_client)
     archive.init(_api_client)
     ai_analyze.init(_api_client, _ai_client)
+    ai_recommend.init(_api_client, _ai_client)
+    ai_mod_parse.init(_api_client, _ai_client)
+    ai_archive.init(_ai_client)
+    ai_qa.init(_ai_client)
 
 
 @driver.on_shutdown

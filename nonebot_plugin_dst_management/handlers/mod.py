@@ -8,13 +8,15 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 from nonebot import on_command
 from nonebot.adapters.onebot.v11 import MessageEvent, Message
 from nonebot.params import CommandArg
 
 from ..client.api_client import DSTApiClient
+from ..ai.client import AIClient
+from ..ai.mod_parser import ModConfigParser
 from ..utils.permission import check_admin, check_group
 from ..utils.formatter import (
     format_error,
@@ -139,13 +141,16 @@ def _format_mod_list(room_id: int, enabled: List[str], disabled: List[str]) -> M
     return Message("\n".join(lines))
 
 
-def init(api_client: DSTApiClient):
+def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
     """
     初始化模组管理命令
     
     Args:
         api_client: DMP API 客户端实例
+        ai_client: AI 客户端实例（可选）
     """
+
+    parser = ModConfigParser(api_client, ai_client) if ai_client else None
 
     # ========== 搜索模组 ==========
     mod_search = on_command("dst mod search", priority=10, block=True)
@@ -350,3 +355,74 @@ def init(api_client: DSTApiClient):
         lines.append("")
         lines.append("💡 如需生效，请重启房间")
         await mod_check.finish(Message("\n".join(lines)))
+
+    # ========== 保存模组配置 ==========
+    mod_config_save = on_command("dst mod config save", priority=10, block=True)
+
+    @mod_config_save.handle()
+    async def handle_mod_config_save(event: MessageEvent, args: Message = CommandArg()):
+        if not await check_group(event):
+            await mod_config_save.finish(format_error("当前群组未授权使用此功能"))
+            return
+        if not await check_admin(event):
+            await mod_config_save.finish(format_error("只有管理员才能执行此操作"))
+            return
+
+        raw = args.extract_plain_text().strip()
+        if not raw:
+            await mod_config_save.finish(
+                format_error("用法：/dst mod config save <房间ID> <世界ID> --optimized")
+            )
+            return
+
+        parts = raw.split()
+        if len(parts) < 3:
+            await mod_config_save.finish(
+                format_error("用法：/dst mod config save <房间ID> <世界ID> --optimized")
+            )
+            return
+
+        room_id_str, world_id, flag = parts[0], parts[1], parts[2]
+        if not room_id_str.isdigit():
+            await mod_config_save.finish(format_error("请提供有效的房间ID"))
+            return
+        if flag != "--optimized":
+            await mod_config_save.finish(format_error("当前仅支持 --optimized 参数"))
+            return
+
+        if parser is None:
+            await mod_config_save.finish(format_error("AI 模组解析器未初始化"))
+            return
+
+        room_id = int(room_id_str)
+        await mod_config_save.send(format_info("正在生成优化配置..."))
+
+        optimized = parser.get_cached_optimized(room_id, world_id)
+        if not optimized:
+            try:
+                result = await parser.parse_mod_config(room_id, world_id)
+                optimized = result.get("optimized_config")
+            except Exception as exc:
+                await mod_config_save.finish(format_error(f"生成优化配置失败：{exc}"))
+                return
+
+        if not optimized:
+            await mod_config_save.finish(format_error("未生成优化配置内容"))
+            return
+
+        save_handler = None
+        for name in ("save_mod_config", "update_modoverrides", "update_mod_config", "save_modoverrides"):
+            if hasattr(api_client, name):
+                save_handler = getattr(api_client, name)
+                break
+
+        if save_handler is None:
+            await mod_config_save.finish(format_error("当前 API 客户端未实现配置保存"))
+            return
+
+        await mod_config_save.send(format_info("正在保存优化配置..."))
+        result = await save_handler(room_id, world_id, optimized)
+        if result.get("success"):
+            await mod_config_save.finish(format_success("配置保存成功，重启后生效"))
+        else:
+            await mod_config_save.finish(format_error(f"保存失败：{result.get('error')}"))
