@@ -73,3 +73,32 @@ async def test_parse_mod_config_fallback_on_error() -> None:
 
     assert "模组配置解析报告" in result["report"]
     assert "AI 分析失败" in result["report"]
+
+
+def test_parse_lua_config_nested_tables() -> None:
+    mod_content = r"""
+return {
+  ["123"] = {
+    enabled = false,
+    configuration_options = {
+      str = "line1\n\t\"quote\"",
+      flag = true,
+      list = { "x", 2, false },
+      nested = { inner = { value = 1 } },
+      none = nil,
+      empty = {},
+    },
+  },
+}
+"""
+    config = AIConfig(enabled=True, provider="mock")
+    provider = MockProvider(config, response="{}")
+    ai_client = AIClient(config, provider=provider)
+    parser = ModConfigParser(DummyApiClient(b""), ai_client)
+
+    parsed = parser._parse_lua_config(mod_content)
+    assert parsed.mod_count == 1
+    assert parsed.option_count == 6
+    options = parsed.mods[0]["configuration_options"]
+    assert options["flag"] is True
+    assert options["list"] == ["x", 2, False]

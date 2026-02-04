@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
@@ -95,6 +96,10 @@ class ModRecommender:
                 system_prompt=system_prompt,
             )
             recommendations = self._parse_ai_response(response, filtered)
+            recommendations = self._validate_recommendations(recommendations, filtered)
+            if not recommendations:
+                logger.warning("AI 推荐结果均无效，回退本地推荐")
+                recommendations = self._fallback_recommendations(filtered)
         except AIError as exc:
             logger.warning("AI 模组推荐失败，回退本地推荐：{err}", err=exc)
             recommendations = self._fallback_recommendations(filtered)
@@ -145,7 +150,10 @@ class ModRecommender:
             try:
                 result = await self.api_client.search_mod("hot", "50")  # type: ignore[attr-defined]
                 if result.get("success"):
-                    return self._convert_search_results(result.get("data") or [])
+                    data = result.get("data")
+                    if isinstance(data, list) and data:
+                        return self._convert_search_results(data)
+                    logger.warning("search_mod 返回空候选池，回退内置池")
             except Exception as exc:
                 logger.warning("热门模组拉取失败，使用内置池：{err}", err=exc)
         return list(_DEFAULT_MOD_POOL)
@@ -260,6 +268,76 @@ class ModRecommender:
         if not recommendations:
             raise ValueError("AI 推荐结果为空")
         return recommendations[:5]
+
+    def _validate_recommendations(
+        self,
+        recommendations: List[Dict[str, Any]],
+        candidates: List[ModCandidate],
+    ) -> List[Dict[str, Any]]:
+        """确保推荐结果来自候选池，必要时替换为最接近的候选模组。"""
+        candidate_map = {mod.mod_id: mod for mod in candidates}
+        candidate_ids = set(candidate_map.keys())
+        validated: List[Dict[str, Any]] = []
+        used: set[str] = set()
+
+        for item in recommendations:
+            mod_id = str(item.get("mod_id") or "").strip()
+            if mod_id in candidate_ids and mod_id not in used:
+                validated.append(item)
+                used.add(mod_id)
+                continue
+
+            replacement = self._find_closest_candidate(mod_id, str(item.get("name") or ""), candidates, used)
+            if replacement:
+                logger.warning(
+                    "推荐模组 {mod_id} 不在候选池中，已替换为 {replacement}",
+                    mod_id=mod_id,
+                    replacement=replacement.mod_id,
+                )
+                validated.append(
+                    {
+                        "mod_id": replacement.mod_id,
+                        "name": replacement.name,
+                        "score": item.get("score", 8.0),
+                        "reason": f"{item.get('reason', '推荐')}（候选池替换）",
+                    }
+                )
+                used.add(replacement.mod_id)
+                continue
+
+            logger.warning("推荐模组 {mod_id} 不在候选池中且无法替换，已跳过", mod_id=mod_id)
+
+        return validated
+
+    def _find_closest_candidate(
+        self,
+        mod_id: str,
+        name: str,
+        candidates: List[ModCandidate],
+        used: set[str],
+    ) -> Optional[ModCandidate]:
+        available = [mod for mod in candidates if mod.mod_id not in used]
+        if not available:
+            return None
+
+        # 优先使用 workshop 数字 ID 的最近距离，保证稳定可预测。
+        if mod_id.startswith("workshop-"):
+            try:
+                target_num = int(mod_id.split("-", 1)[1])
+                best = min(
+                    available,
+                    key=lambda mod: abs(int(mod.mod_id.split("-", 1)[1]) - target_num),
+                )
+                return best
+            except Exception:
+                pass
+
+        def score_candidate(mod: ModCandidate) -> float:
+            id_score = SequenceMatcher(None, mod_id, mod.mod_id).ratio()
+            name_score = SequenceMatcher(None, name, mod.name).ratio() if name else 0.0
+            return max(id_score, name_score)
+
+        return max(available, key=score_candidate, default=None)
 
     def _fallback_recommendations(self, candidates: List[ModCandidate]) -> List[Dict[str, Any]]:
         recommendations: List[Dict[str, Any]] = []

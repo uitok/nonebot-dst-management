@@ -17,6 +17,8 @@ from loguru import logger
 from .base import AIError, format_ai_error
 from .client import AIClient
 
+MAX_ARCHIVE_SIZE = 50 * 1024 * 1024  # 50MB 上限，防止 zip bomb
+
 
 @dataclass
 class ArchiveSnippet:
@@ -47,6 +49,11 @@ class ArchiveAnalyzer:
         Returns:
             str: Markdown 报告
         """
+        # 先做体积检查，避免超大压缩包造成资源消耗或 zip bomb 风险。
+        if len(archive_data) > MAX_ARCHIVE_SIZE:
+            logger.warning("拦截超大存档文件，大小={size} bytes", size=len(archive_data))
+            return "存档文件过大，已拒绝分析。请使用不超过 50MB 的较小文件后重试。"
+
         try:
             file_list, snippets = self._extract_files(archive_data)
         except Exception as exc:

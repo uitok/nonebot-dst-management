@@ -4,6 +4,7 @@ nonebot-adapter-onebot>=2.3.0
 httpx>=0.24.0
 loguru>=0.7.0
 pydantic>=2.0.0
+lupa>=2.0.0
 
 # 可选依赖
 # nonebot-plugin-localstore

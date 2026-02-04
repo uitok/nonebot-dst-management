@@ -155,6 +155,78 @@ class ModConfigParser:
 
     def _parse_lua_config(self, content: str) -> ParsedModConfig:
         warnings: List[str] = []
+
+        # 使用 lupa 进行 Lua 编译与执行，避免正则解析带来的嵌套/转义/注释问题。
+        try:
+            runtime, lua_error, lupa_bytecode = self._init_lua_runtime()
+        except Exception as exc:
+            warnings.append(f"Lua 解析器初始化失败：{exc}，已回退正则解析")
+            return self._parse_lua_config_fallback(content, warnings)
+
+        try:
+            # 先编译进行语法校验，避免执行阶段才暴露错误。
+            lupa_bytecode.compile(content)
+        except Exception as exc:
+            warnings.append(f"Lua 语法错误：{exc}")
+            return ParsedModConfig(mods=[], warnings=warnings, mod_count=0, option_count=0)
+
+        try:
+            result = runtime.execute(content)
+        except lua_error as exc:
+            warnings.append(f"Lua 执行失败：{exc}")
+            return ParsedModConfig(mods=[], warnings=warnings, mod_count=0, option_count=0)
+        except Exception as exc:
+            warnings.append(f"Lua 解析失败：{exc}")
+            return ParsedModConfig(mods=[], warnings=warnings, mod_count=0, option_count=0)
+
+        if not self._is_lua_table(result):
+            warnings.append("Lua 返回值不是表结构，无法解析")
+            return ParsedModConfig(mods=[], warnings=warnings, mod_count=0, option_count=0)
+
+        config = self._lua_table_to_python(result)
+        if not isinstance(config, dict):
+            warnings.append("Lua 配置不是键值表结构，无法解析")
+            return ParsedModConfig(mods=[], warnings=warnings, mod_count=0, option_count=0)
+
+        mods: List[Dict[str, Any]] = []
+        for raw_mod_id, raw_block in config.items():
+            mod_id = self._normalize_mod_id(raw_mod_id)
+            if not isinstance(raw_block, dict):
+                warnings.append(f"模组 {mod_id} 配置不是表结构，已跳过")
+                continue
+            enabled = bool(raw_block.get("enabled", True))
+            options_raw = raw_block.get("configuration_options")
+            if options_raw is None:
+                options: Dict[str, Any] = {}
+            elif isinstance(options_raw, dict):
+                options = options_raw
+            else:
+                warnings.append(f"模组 {mod_id} 的 configuration_options 非表结构，已忽略")
+                options = {}
+            mods.append(
+                {
+                    "mod_id": mod_id,
+                    "enabled": enabled,
+                    "configuration_options": options,
+                }
+            )
+
+        if not mods:
+            warnings.append("未解析到任何模组配置")
+
+        option_count = sum(len(item.get("configuration_options") or {}) for item in mods)
+        return ParsedModConfig(mods=mods, warnings=warnings, mod_count=len(mods), option_count=option_count)
+
+    def _init_lua_runtime(self) -> Tuple[Any, Any, Any]:
+        """初始化 lupa LuaRuntime，并返回运行时/错误类型/编译器。"""
+        from lupa import LuaError, LuaRuntime, bytecode as lupa_bytecode
+
+        runtime = LuaRuntime(unpack_returned_tuples=True)
+        return runtime, LuaError, lupa_bytecode
+
+    def _parse_lua_config_fallback(self, content: str, warnings: Optional[List[str]] = None) -> ParsedModConfig:
+        """lupa 不可用时的正则降级解析。"""
+        warnings = warnings or []
         mods: List[Dict[str, Any]] = []
 
         for mod_id, block in self._extract_mod_blocks(content):
@@ -173,6 +245,36 @@ class ModConfigParser:
 
         option_count = sum(len(item.get("configuration_options") or {}) for item in mods)
         return ParsedModConfig(mods=mods, warnings=warnings, mod_count=len(mods), option_count=option_count)
+
+    def _is_lua_table(self, value: Any) -> bool:
+        module_name = getattr(value.__class__, "__module__", "")
+        return "lupa" in module_name and hasattr(value, "items")
+
+    def _lua_table_to_python(self, value: Any) -> Any:
+        if not self._is_lua_table(value):
+            return value
+
+        items = list(value.items())
+        if not items:
+            return {}
+
+        keys = [key for key, _ in items]
+        if all(isinstance(key, int) and key >= 1 for key in keys):
+            max_key = max(keys)
+            if len(keys) == max_key:
+                return [self._lua_table_to_python(value[idx]) for idx in range(1, max_key + 1)]
+
+        converted: Dict[str, Any] = {}
+        for key, item in items:
+            key_str = str(key)
+            converted[key_str] = self._lua_table_to_python(item)
+        return converted
+
+    def _normalize_mod_id(self, raw_mod_id: Any) -> str:
+        mod_id = str(raw_mod_id).strip()
+        if not mod_id.startswith("workshop-"):
+            mod_id = f"workshop-{mod_id}"
+        return mod_id
 
     def _extract_mod_blocks(self, content: str) -> List[Tuple[str, str]]:
         result: List[Tuple[str, str]] = []
@@ -476,7 +578,32 @@ class ModConfigParser:
         if isinstance(value, str):
             escaped = value.replace("\\", "\\\\").replace("\"", "\\\"")
             return f"\"{escaped}\""
+        if isinstance(value, list):
+            return self._format_lua_table(value)
+        if isinstance(value, dict):
+            return self._format_lua_table(value)
         return f"\"{str(value)}\""
+
+    def _format_lua_table(self, value: Any) -> str:
+        if isinstance(value, list):
+            items = ", ".join(self._format_lua_value(item) for item in value)
+            return f"{{ {items} }}"
+        if isinstance(value, dict):
+            pairs = []
+            for key, item in value.items():
+                pairs.append(f"{self._format_lua_key(key)} = {self._format_lua_value(item)}")
+            inner = ", ".join(pairs)
+            return f"{{ {inner} }}"
+        return "{}"
+
+    def _format_lua_key(self, key: Any) -> str:
+        if isinstance(key, (int, float)):
+            return f"[{key}]"
+        key_str = str(key)
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", key_str):
+            return key_str
+        escaped = key_str.replace("\\", "\\\\").replace("\"", "\\\"")
+        return f"[\"{escaped}\"]"
 
     def _extract_json(self, text: str) -> Any:
         text = text.strip()

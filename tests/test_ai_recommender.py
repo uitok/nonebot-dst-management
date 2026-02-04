@@ -56,3 +56,29 @@ async def test_recommend_mods_fallback_on_ai_error() -> None:
 
     assert "模组推荐报告" in result["report"]
     assert result["recommendations"]
+
+
+@pytest.mark.asyncio
+async def test_recommend_mods_replaces_invalid_candidate() -> None:
+    response = json.dumps(
+        {
+            "recommendations": [
+                {
+                    "mod_id": "workshop-1000000100",
+                    "name": "Unknown Mod",
+                    "score": 8.8,
+                    "reason": "unknown",
+                }
+            ]
+        }
+    )
+    config = AIConfig(enabled=True, provider="mock")
+    provider = MockProvider(config, response=response)
+    ai_client = AIClient(config, provider=provider)
+
+    recommender = ModRecommender(DummyApiClient(), ai_client)
+    result = await recommender.recommend_mods(2, None)
+
+    rec_id = result["recommendations"][0]["mod_id"]
+    assert rec_id != "workshop-1000000100"
+    assert rec_id.startswith("workshop-10000000")
