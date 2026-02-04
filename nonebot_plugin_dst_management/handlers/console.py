@@ -5,7 +5,7 @@
 """
 
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import MessageEvent, Message
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent, Message
 from nonebot.params import CommandArg
 from nonebot.permission import Permission
 from nonebot.rule import Rule
@@ -44,14 +44,14 @@ def init(api_client: DSTApiClient):
     )
 
     @console_cmd.handle()
-    async def handle_console(event: MessageEvent, args: Message = CommandArg()):
+    async def handle_console(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         # 检查群组权限
         if not await check_group(event):
             await console_cmd.finish(format_error("当前群组未授权使用此功能"))
             return
 
         # 检查管理员权限
-        if not await check_admin(event):
+        if not await check_admin(bot, event):
             await console_cmd.finish(format_error("只有管理员才能执行此操作"))
             return
 
@@ -93,14 +93,14 @@ def init(api_client: DSTApiClient):
     )
 
     @announce_cmd.handle()
-    async def handle_announce(event: MessageEvent, args: Message = CommandArg()):
+    async def handle_announce(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         # 检查群组权限
         if not await check_group(event):
             await announce_cmd.finish(format_error("当前群组未授权使用此功能"))
             return
 
         # 检查管理员权限
-        if not await check_admin(event):
+        if not await check_admin(bot, event):
             await announce_cmd.finish(format_error("只有管理员才能执行此操作"))
             return
 

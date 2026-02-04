@@ -98,3 +98,15 @@ async def test_ai_client_cache() -> None:
     assert result1 == "cached"
     assert result2 == "cached"
     assert calls == 1
+
+
+@pytest.mark.asyncio
+async def test_ai_client_cache_eviction() -> None:
+    config = AIConfig(enabled=True, provider="mock", cache_ttl=60, cache_max_entries=1)
+    provider = MockProvider(config, response="cached")
+    ai_client = AIClient(config, provider=provider)
+
+    await ai_client.chat([{"role": "user", "content": "hello"}])
+    await ai_client.chat([{"role": "user", "content": "world"}])
+
+    assert len(ai_client._cache) == 1

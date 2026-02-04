@@ -5,7 +5,7 @@
 """
 
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import MessageEvent, Message
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent, Message
 from nonebot.params import CommandArg
 
 from ..client.api_client import DSTApiClient
@@ -67,9 +67,9 @@ def init(api_client: DSTApiClient):
     kick_cmd = on_command("dst kick", priority=10, block=True)
     
     @kick_cmd.handle()
-    async def handle_kick(event: MessageEvent, args: Message = CommandArg()):
+    async def handle_kick(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         # 检查管理员权限
-        if not await check_admin(event):
+        if not await check_admin(bot, event):
             await kick_cmd.finish(format_error("只有管理员才能执行此操作"))
             return
         

@@ -6,15 +6,16 @@ DST AI 智能问答系统
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
 from loguru import logger
 
 from .base import AIError, format_ai_error
 from .client import AIClient
+from .prompt import TemplateManager, format_history, format_sources
+from .session import SessionManager
 
 
 @dataclass(frozen=True)
@@ -28,23 +29,41 @@ class KnowledgeSource:
 class QASystem:
     """AI 问答系统"""
 
-    def __init__(self, ai_client: AIClient, docs_root: Optional[Path] = None) -> None:
+    def __init__(
+        self,
+        ai_client: AIClient,
+        docs_root: Optional[Path] = None,
+        session_manager: Optional[SessionManager] = None,
+        template_manager: Optional[TemplateManager] = None,
+    ) -> None:
         self.ai_client = ai_client
         self.docs_root = docs_root or Path(__file__).resolve().parents[2]
+        self.session_manager = session_manager or SessionManager(
+            max_rounds=ai_client.config.session_max_rounds,
+            ttl_seconds=ai_client.config.session_ttl,
+        )
+        self.template_manager = template_manager or self._build_template_manager()
 
-    async def ask(self, question: str, context: Optional[str] = None) -> str:
+    async def ask(
+        self,
+        question: str,
+        context: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> str:
         """
         执行问答
 
         Args:
             question: 用户问题
             context: 可选上下文
+            session_id: 会话 ID
 
         Returns:
             str: Markdown 格式回答
         """
         sources = self._build_knowledge_base(context)
-        prompt = self._build_prompt(question, sources)
+        history = self.session_manager.list_history(session_id) if session_id else []
+        prompt = self._build_prompt(question, sources, history, context)
         system_prompt = self._system_prompt()
 
         try:
@@ -53,7 +72,10 @@ class QASystem:
                 system_prompt=system_prompt,
             )
             if response and response.strip():
-                return response.strip()
+                answer = response.strip()
+                if session_id:
+                    self.session_manager.append_turn(session_id, question, answer)
+                return answer
         except AIError as exc:
             logger.warning("AI 问答失败，回退本地回答：{err}", err=exc)
             return self._fallback_answer(question, sources, exc)
@@ -62,6 +84,45 @@ class QASystem:
             return self._fallback_answer(question, sources, exc)
 
         return self._fallback_answer(question, sources, None)
+
+    async def ask_stream(
+        self,
+        question: str,
+        context: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ):
+        sources = self._build_knowledge_base(context)
+        history = self.session_manager.list_history(session_id) if session_id else []
+        prompt = self._build_prompt(question, sources, history, context)
+        system_prompt = self._system_prompt()
+
+        response_parts: List[str] = []
+        try:
+            async for chunk in self.ai_client.stream_chat(
+                [{"role": "user", "content": prompt}],
+                system_prompt=system_prompt,
+            ):
+                if chunk:
+                    response_parts.append(chunk)
+                    yield chunk
+        except AIError as exc:
+            logger.warning("AI 流式问答失败，回退本地回答：{err}", err=exc)
+            yield self._fallback_answer(question, sources, exc)
+            return
+        except Exception as exc:
+            logger.exception("AI 流式问答发生未知错误：{err}", err=exc)
+            yield self._fallback_answer(question, sources, exc)
+            return
+
+        answer = "".join(response_parts).strip()
+        if not answer:
+            yield self._fallback_answer(question, sources, None)
+            return
+        if session_id:
+            self.session_manager.append_turn(session_id, question, answer)
+
+    def reset_session(self, session_id: str) -> None:
+        self.session_manager.reset_session(session_id)
 
     def _build_knowledge_base(self, extra_context: Optional[str]) -> List[KnowledgeSource]:
         sources: List[KnowledgeSource] = []
@@ -89,26 +150,23 @@ class QASystem:
 
         return sources
 
-    def _build_prompt(self, question: str, sources: Sequence[KnowledgeSource]) -> str:
-        payload = {
+    def _build_prompt(
+        self,
+        question: str,
+        sources: Sequence[KnowledgeSource],
+        history: Sequence[dict[str, str]],
+        context: Optional[str],
+    ) -> str:
+        sources_text = format_sources([(source.name, source.content) for source in sources])
+        history_text = format_history(history)
+        context_text = f"补充上下文：\n{context}\n" if context else ""
+        variables = {
             "question": question,
-            "sources": [
-                {
-                    "name": source.name,
-                    "content": source.content,
-                }
-                for source in sources
-            ],
+            "sources": sources_text,
+            "history": history_text,
+            "context": context_text,
         }
-
-        return (
-            "你是 DST 管理插件的智能助手，请根据知识库回答用户问题。\n\n"
-            f"输入数据(JSON)：\n{json.dumps(payload, ensure_ascii=True, indent=2)}\n\n"
-            "要求：\n"
-            "1. 使用 Markdown 输出回答。\n"
-            "2. 给出清晰的结论与可执行步骤。\n"
-            "3. 在回答末尾列出引用来源（名称即可）。\n"
-        )
+        return self.template_manager.render(variables)
 
     def _system_prompt(self) -> str:
         return "你是 DST 服务器与管理插件专家，回答时严谨且可执行。"
@@ -130,6 +188,17 @@ class QASystem:
             else:
                 lines.append(f"⚠️ AI 问答失败：{error}")
         return "\n".join(lines)
+
+    def _build_template_manager(self) -> TemplateManager:
+        config = self.ai_client.config
+        templates = dict(config.prompt_templates)
+        if config.prompt_template:
+            templates["custom"] = config.prompt_template
+        if config.prompt_template and config.prompt_active == "default":
+            active = "custom"
+        else:
+            active = config.prompt_active or ("custom" if config.prompt_template else "default")
+        return TemplateManager(templates=templates, active=active)
 
 
 _DST_BASICS = (

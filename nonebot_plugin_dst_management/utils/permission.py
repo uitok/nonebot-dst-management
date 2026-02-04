@@ -4,35 +4,33 @@
 提供命令权限检查功能。
 """
 
-from typing import Optional
-from nonebot.adapters.onebot.v11 import MessageEvent, GroupMessageEvent
-from nonebot import get_driver
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent, GroupMessageEvent
+from nonebot.permission import SUPERUSER
 
 from ..config import get_dst_config
 
 
-async def check_admin(event: MessageEvent) -> bool:
+async def check_admin(bot: Bot, event: MessageEvent) -> bool:
     """
     检查用户是否是管理员
     
     Args:
+        bot: Bot 实例
         event: 消息事件
         
     Returns:
         bool: 是否是管理员
     """
-    user_id = event.user_id
     config = get_dst_config()
+    user_id = str(event.user_id)
     
     # 检查是否在管理员列表中
-    if user_id in config.dst_admin_users:
+    if any(str(uid) == user_id for uid in config.dst_admin_users):
         return True
     
-    # 检查是否是超级用户（NoneBot 内置）
-    driver = get_driver()
-    if hasattr(driver, "config") and hasattr(driver.config, "superusers"):
-        if user_id in driver.config.superusers:
-            return True
+    # 使用 NoneBot 权限系统检查超级用户
+    if await SUPERUSER(bot, event):
+        return True
     
     return False
 
@@ -61,11 +59,12 @@ async def check_group(event: MessageEvent) -> bool:
     return group_id in config.dst_admin_groups
 
 
-async def check_permission(event: MessageEvent, level: str = "user") -> bool:
+async def check_permission(bot: Bot, event: MessageEvent, level: str = "user") -> bool:
     """
     检查用户权限等级
     
     Args:
+        bot: Bot 实例
         event: 消息事件
         level: 权限等级（user/admin/super）
         
@@ -78,14 +77,11 @@ async def check_permission(event: MessageEvent, level: str = "user") -> bool:
     
     if level == "admin":
         # 需要管理员权限
-        return await check_admin(event) and await check_group(event)
+        return await check_admin(bot, event) and await check_group(event)
     
     if level == "super":
         # 需要超级用户权限
-        driver = get_driver()
-        if hasattr(driver, "config") and hasattr(driver.config, "superusers"):
-            return event.user_id in driver.config.superusers
-        return False
+        return await SUPERUSER(bot, event)
     
     return False
 

@@ -17,7 +17,12 @@ def parse_room_id(room_id_str: str) -> Optional[int]:
     Returns:
         Optional[int]: 房间 ID，解析失败返回 None
     """
-    if not room_id_str or not room_id_str.isdigit():
+    if not room_id_str:
+        return None
+    
+    room_id_str = room_id_str.strip()
+    
+    if not room_id_str.isdigit():
         return None
 
     room_id = int(room_id_str)
@@ -80,7 +85,10 @@ def parse_console_command_args(
 
     parts = raw_text.split()
     if len(parts) < 2:
-        return None, None, None, f"用法：{usage}"
+        room_id = parse_room_id(parts[0]) if parts else None
+        if room_id is None:
+            return None, None, None, f"用法：{usage}"
+        return room_id, None, None, f"用法：{usage}"
 
     room_id = parse_room_id(parts[0])
     if room_id is None:

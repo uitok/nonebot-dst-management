@@ -5,7 +5,7 @@
 """
 
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import MessageEvent, Message
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent, Message
 from nonebot.params import CommandArg
 
 from ..client.api_client import DSTApiClient
@@ -101,9 +101,9 @@ def init(api_client: DSTApiClient):
     room_start = on_command("dst start", priority=10, block=True)
     
     @room_start.handle()
-    async def handle_room_start(event: MessageEvent, args: Message = CommandArg()):
+    async def handle_room_start(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         # 检查管理员权限
-        if not await check_admin(event):
+        if not await check_admin(bot, event):
             await room_start.finish(format_error("只有管理员才能执行此操作"))
             return
         
@@ -130,9 +130,9 @@ def init(api_client: DSTApiClient):
     room_stop = on_command("dst stop", priority=10, block=True)
     
     @room_stop.handle()
-    async def handle_room_stop(event: MessageEvent, args: Message = CommandArg()):
+    async def handle_room_stop(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         # 检查管理员权限
-        if not await check_admin(event):
+        if not await check_admin(bot, event):
             await room_stop.finish(format_error("只有管理员才能执行此操作"))
             return
         
@@ -159,9 +159,9 @@ def init(api_client: DSTApiClient):
     room_restart = on_command("dst restart", priority=10, block=True)
     
     @room_restart.handle()
-    async def handle_room_restart(event: MessageEvent, args: Message = CommandArg()):
+    async def handle_room_restart(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         # 检查管理员权限
-        if not await check_admin(event):
+        if not await check_admin(bot, event):
             await room_restart.finish(format_error("只有管理员才能执行此操作"))
             return
         

@@ -38,11 +38,11 @@ class TestEscapeConsoleString:
     def test_escape_backslash(self):
         """测试反斜杠转义"""
         assert escape_console_string("test\\slash") == "test\\\\slash"
-        assert escape_console_string("\\\\") == "\\\\\\\"
+        assert escape_console_string("\\") == "\\\\"
     
     def test_escape_quotes(self):
         """测试引号转义"""
-        assert escape_console_string('hello "world"') == 'hello \\"world\"'
+        assert escape_console_string('hello "world"') == 'hello \\"world\\"'
         assert escape_console_string('"test"') == '\\"test\\"'
     
     def test_escape_newlines(self):
@@ -52,7 +52,7 @@ class TestEscapeConsoleString:
     
     def test_escape_mixed(self):
         """测试混合转义"""
-        assert escape_console_string('test\\slash "quote"') == 'test\\\\slash \\"quote\"'
+        assert escape_console_string('test\\slash "quote"') == 'test\\\\slash \\"quote\\"'
 
 
 class TestParseRoomAndMessage:

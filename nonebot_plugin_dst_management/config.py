@@ -4,6 +4,7 @@
 使用 Pydantic 进行配置验证和管理。
 """
 
+import json
 import os
 from pathlib import Path
 from typing import List, Optional
@@ -166,12 +167,29 @@ def _apply_env_overrides(config: DSTConfig) -> DSTConfig:
         ai_updates["timeout"] = int(value)
     if (value := env("AI_CACHE_TTL")) is not None:
         ai_updates["cache_ttl"] = int(value)
+    if (value := env("AI_CACHE_MAX_ENTRIES")) is not None:
+        ai_updates["cache_max_entries"] = int(value)
     if (value := env("AI_RETRIES")) is not None:
         ai_updates["retries"] = int(value)
     if (value := env("AI_RETRY_BACKOFF")) is not None:
         ai_updates["retry_backoff"] = float(value)
     if (value := env("AI_RETRY_MAX_BACKOFF")) is not None:
         ai_updates["retry_max_backoff"] = float(value)
+    if (value := env("AI_SESSION_MAX_ROUNDS")) is not None:
+        ai_updates["session_max_rounds"] = int(value)
+    if (value := env("AI_SESSION_TTL")) is not None:
+        ai_updates["session_ttl"] = int(value)
+    if (value := env("AI_PROMPT_ACTIVE")) is not None:
+        ai_updates["prompt_active"] = value
+    if (value := env("AI_PROMPT_TEMPLATE")) is not None:
+        ai_updates["prompt_template"] = value
+    if (value := env("AI_PROMPT_TEMPLATES")) is not None:
+        try:
+            ai_updates["prompt_templates"] = json.loads(value)
+        except json.JSONDecodeError:
+            pass
+    if (value := env("AI_STREAM_CHUNK_SIZE")) is not None:
+        ai_updates["stream_chunk_size"] = int(value)
 
     if ai_updates:
         updates["ai"] = config.ai.model_copy(update=ai_updates)

@@ -11,6 +11,8 @@ from .config import DSTConfig, Config, get_dst_config
 from .client.api_client import DSTApiClient
 from .ai.client import AIClient
 
+__version__ = "0.3.0"
+
 __plugin_meta__ = PluginMetadata(
     name="DST服务器管理",
     description="通过DMP API管理Don't Starve Together服务器",
@@ -30,6 +32,12 @@ __plugin_meta__ = PluginMetadata(
   /dst backup list <房间ID>   - 查看备份列表
   /dst backup create <房间ID> - 创建备份 🔒
   /dst backup restore <房间ID> <文件名> - 恢复备份 🔒
+
+存档管理：
+  /dst archive upload <房间ID> <文件URL或文件路径> - 上传存档 🔒
+  /dst archive download <房间ID> - 下载存档
+  /dst archive replace <房间ID> <文件URL或文件路径> - 替换存档 🔒
+  /dst archive validate <文件路径> - 验证存档结构
 
 模组管理：
   /dst mod search <关键词>       - 搜索模组
@@ -133,6 +141,7 @@ def get_api_client() -> DSTApiClient:
 
 
 __all__ = [
+    "__version__",
     "__plugin_meta__",
     "DSTConfig",
     "Config",

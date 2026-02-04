@@ -12,11 +12,38 @@ from nonebot_plugin_dst_management.client.api_client import DSTApiClient
 @pytest.fixture
 def api_client():
     """创建 API 客户端测试实例"""
-    # 使用 Mock API 服务器
-    return DSTApiClient(
-        base_url="http://localhost:9999",
+    client = DSTApiClient(
+        base_url="http://mock-api.local",
         token="test_token_123"
     )
+    
+    # Mock _request method
+    async def mock_request(method, endpoint, **kwargs):
+        if endpoint == "/room/list":
+            return {"success": True, "data": {"rows": [{"id": 1, "gameName": "测试服务器1"}], "total": 1}}
+        elif endpoint == "/room/player/online":
+            return {"success": True, "data": [{"id": "KU_123", "name": "Player1"}]}
+        elif endpoint.startswith("/room/"):
+            return {"success": True, "data": {"id": 1, "gameName": "测试服务器1"}}
+        elif endpoint == "/dashboard/startup":
+            return {"success": True, "data": {"roomID": 1}}
+        elif endpoint == "/dashboard/shutdown":
+            return {"success": True, "data": {"roomID": 1}}
+        elif endpoint == "/dashboard/restart":
+            return {"success": True, "data": {"roomID": 1}}
+        elif endpoint == "/tools/backup/create":
+            return {"success": True, "data": {"filename": "backup.zip"}}
+        elif endpoint == "/tools/backup/list":
+            return {"success": True, "data": ["backup1.zip", "backup2.zip"]}
+        elif endpoint == "/dashboard/console":
+            return {"success": True, "data": "OK"}
+        elif endpoint == "/mod/search":
+            return {"success": True, "data": [{"id": 123, "name": "健康显示"}]}
+            
+        return {"success": False, "error": "Unknown endpoint"}
+
+    client._request = mock_request
+    return client
 
 
 @pytest.mark.asyncio

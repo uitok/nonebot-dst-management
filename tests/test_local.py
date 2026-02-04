@@ -5,12 +5,20 @@
 """
 
 import asyncio
+import os
 import sys
 from pathlib import Path
+
+import pytest
 
 # 添加项目路径
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_LOCAL_TESTS") != "1",
+    reason="local integration tests are disabled by default",
+)
 
 from nonebot_plugin_dst_management.client.api_client import DSTApiClient
 

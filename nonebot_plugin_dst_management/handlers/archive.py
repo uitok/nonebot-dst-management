@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Optional
 
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import MessageEvent, Message
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent, Message
 from nonebot.params import CommandArg
 
 from ..client.api_client import DSTApiClient
@@ -67,11 +67,11 @@ def init(api_client: DSTApiClient):
     archive_upload = on_command("dst archive upload", priority=10, block=True)
 
     @archive_upload.handle()
-    async def handle_archive_upload(event: MessageEvent, args: Message = CommandArg()):
+    async def handle_archive_upload(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         if not await check_group(event):
             await archive_upload.finish(format_error("当前群组未授权使用此功能"))
             return
-        if not await check_admin(event):
+        if not await check_admin(bot, event):
             await archive_upload.finish(format_error("只有管理员才能执行此操作"))
             return
 
@@ -186,11 +186,11 @@ def init(api_client: DSTApiClient):
     archive_replace = on_command("dst archive replace", priority=10, block=True)
 
     @archive_replace.handle()
-    async def handle_archive_replace(event: MessageEvent, args: Message = CommandArg()):
+    async def handle_archive_replace(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         if not await check_group(event):
             await archive_replace.finish(format_error("当前群组未授权使用此功能"))
             return
-        if not await check_admin(event):
+        if not await check_admin(bot, event):
             await archive_replace.finish(format_error("只有管理员才能执行此操作"))
             return
 

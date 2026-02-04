@@ -152,6 +152,15 @@ class AIProvider:
         """发送聊天请求"""
         raise NotImplementedError
 
+    async def stream_chat(
+        self,
+        messages: Sequence[ChatMessage],
+        system_prompt: str = "",
+        **kwargs: Any,
+    ):
+        """发送聊天请求（流式返回）"""
+        raise NotImplementedError
+
     async def close(self) -> None:
         """关闭 Provider 持有的 HTTP 客户端"""
         if self._owns_client:
@@ -212,6 +221,58 @@ class AIProvider:
         except ValueError as exc:
             logger.warning("AI 响应解析失败：provider={provider} url={url} err={err}", provider=self.name, url=url, err=exc)
             raise AIResponseParseError("AI 响应格式错误") from exc
+
+    async def _stream_lines(
+        self,
+        url: str,
+        headers: Headers,
+        payload: dict[str, Any],
+        timeout: Optional[int] = None,
+    ):
+        try:
+            logger.debug(
+                "AI 流式请求发送：provider={provider} url={url} headers={headers} payload_keys={keys} timeout={timeout}",
+                provider=self.name,
+                url=url,
+                headers=_mask_headers(headers),
+                keys=sorted(payload.keys()),
+                timeout=timeout,
+            )
+            async with self.http_client.stream(
+                "POST",
+                url,
+                headers=headers,
+                json=payload,
+                timeout=timeout,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if line:
+                        yield line
+        except httpx.TimeoutException as exc:
+            logger.warning("AI 流式请求超时：provider={provider} url={url}", provider=self.name, url=url)
+            raise AITimeoutError("AI 请求超时") from exc
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            message = exc.response.text
+            logger.warning(
+                "AI 流式响应错误：provider={provider} status={status} body={body}",
+                provider=self.name,
+                status=status,
+                body=message[:500],
+            )
+            if status in (401, 403):
+                raise AIAuthError("AI 认证失败，请检查 API Key") from exc
+            if status == 429:
+                raise AIRateLimitError("AI 调用过于频繁，请稍后重试") from exc
+            if status in (408, 504):
+                raise AITimeoutError("AI 请求超时") from exc
+            if 500 <= status <= 599:
+                raise AITransientError("AI 服务暂时不可用，请稍后重试") from exc
+            raise AIProviderError(f"AI 服务错误: {message}", status_code=status) from exc
+        except httpx.RequestError as exc:
+            logger.warning("AI 流式网络错误：provider={provider} url={url} err={err}", provider=self.name, url=url, err=exc)
+            raise AITransientError("AI 网络错误") from exc
 
 
 def format_ai_error(error: Exception) -> str:

@@ -11,7 +11,7 @@ import re
 from typing import Dict, List, Tuple, Optional
 
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import MessageEvent, Message
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent, Message
 from nonebot.params import CommandArg
 
 from ..client.api_client import DSTApiClient
@@ -211,9 +211,9 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
     mod_add = on_command("dst mod add", priority=10, block=True)
 
     @mod_add.handle()
-    async def handle_mod_add(event: MessageEvent, args: Message = CommandArg()):
+    async def handle_mod_add(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         # 检查管理员权限
-        if not await check_admin(event):
+        if not await check_admin(bot, event):
             await mod_add.finish(format_error("只有管理员才能执行此操作"))
             return
 
@@ -273,9 +273,9 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
     mod_remove = on_command("dst mod remove", priority=10, block=True)
 
     @mod_remove.handle()
-    async def handle_mod_remove(event: MessageEvent, args: Message = CommandArg()):
+    async def handle_mod_remove(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         # 检查管理员权限
-        if not await check_admin(event):
+        if not await check_admin(bot, event):
             await mod_remove.finish(format_error("只有管理员才能执行此操作"))
             return
 
@@ -360,11 +360,11 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
     mod_config_save = on_command("dst mod config save", priority=10, block=True)
 
     @mod_config_save.handle()
-    async def handle_mod_config_save(event: MessageEvent, args: Message = CommandArg()):
+    async def handle_mod_config_save(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         if not await check_group(event):
             await mod_config_save.finish(format_error("当前群组未授权使用此功能"))
             return
-        if not await check_admin(event):
+        if not await check_admin(bot, event):
             await mod_config_save.finish(format_error("只有管理员才能执行此操作"))
             return
 

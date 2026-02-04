@@ -5,7 +5,7 @@
 """
 
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import MessageEvent, Message
+from nonebot.adapters.onebot.v11 import Bot, MessageEvent, Message
 from nonebot.params import CommandArg
 
 from ..client.api_client import DSTApiClient
@@ -67,9 +67,9 @@ def init(api_client: DSTApiClient):
     backup_create = on_command("dst backup create", priority=10, block=True)
     
     @backup_create.handle()
-    async def handle_backup_create(event: MessageEvent, args: Message = CommandArg()):
+    async def handle_backup_create(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         # 检查管理员权限
-        if not await check_admin(event):
+        if not await check_admin(bot, event):
             await backup_create.finish(format_error("只有管理员才能执行此操作"))
             return
         
@@ -96,9 +96,9 @@ def init(api_client: DSTApiClient):
     backup_restore = on_command("dst backup restore", priority=10, block=True)
     
     @backup_restore.handle()
-    async def handle_backup_restore(event: MessageEvent, args: Message = CommandArg()):
+    async def handle_backup_restore(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
         # 检查管理员权限
-        if not await check_admin(event):
+        if not await check_admin(bot, event):
             await backup_restore.finish(format_error("只有管理员才能执行此操作"))
             return
         

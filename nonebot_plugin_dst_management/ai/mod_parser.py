@@ -398,6 +398,8 @@ class ModConfigParser:
             return False
         if raw.lower() == "nil":
             return None
+        if raw.startswith("{") and raw.endswith("}"):
+            return self._parse_table_literal(raw)
         if raw.startswith("\"") and raw.endswith("\""):
             return raw[1:-1]
         if raw.startswith("'") and raw.endswith("'"):
@@ -408,6 +410,67 @@ class ModConfigParser:
             return int(raw)
         except ValueError:
             return raw
+
+    def _parse_table_literal(self, raw: str) -> Any:
+        content = raw.strip()[1:-1].strip()
+        if not content:
+            return {}
+
+        entries: List[str] = []
+        current: List[str] = []
+        depth = 0
+        in_string: Optional[str] = None
+        escaped = False
+
+        for ch in content:
+            if in_string:
+                current.append(ch)
+                if escaped:
+                    escaped = False
+                    continue
+                if ch == "\\":
+                    escaped = True
+                    continue
+                if ch == in_string:
+                    in_string = None
+                continue
+            if ch in ("'", '"'):
+                in_string = ch
+                current.append(ch)
+                continue
+            if ch == "{":
+                depth += 1
+                current.append(ch)
+                continue
+            if ch == "}":
+                depth -= 1
+                current.append(ch)
+                continue
+            if ch == "," and depth == 0:
+                entry = "".join(current).strip()
+                if entry:
+                    entries.append(entry)
+                current = []
+                continue
+            current.append(ch)
+
+        tail = "".join(current).strip()
+        if tail:
+            entries.append(tail)
+
+        has_pairs = any("=" in entry for entry in entries)
+        if has_pairs:
+            result: Dict[str, Any] = {}
+            for entry in entries:
+                if "=" not in entry:
+                    continue
+                key_raw, value_raw = entry.split("=", 1)
+                key = self._normalize_option_key(key_raw.strip())
+                value = self._normalize_option_value(value_raw.strip())
+                result[key] = value
+            return result
+
+        return [self._normalize_option_value(entry.strip()) for entry in entries]
 
     def _build_prompt(
         self,

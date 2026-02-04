@@ -23,6 +23,8 @@ from .mod_parser import ModConfigParser
 from .qa import QASystem
 from .recommender import ModRecommender
 from .config import AIConfig
+from .session import SessionManager
+from .prompt import TemplateManager, DEFAULT_PROMPT_TEMPLATE
 
 __all__ = [
     "AIAuthError",
@@ -46,4 +48,7 @@ __all__ = [
     "QASystem",
     "ModRecommender",
     "AIConfig",
+    "SessionManager",
+    "TemplateManager",
+    "DEFAULT_PROMPT_TEMPLATE",
 ]

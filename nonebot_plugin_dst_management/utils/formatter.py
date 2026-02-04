@@ -142,6 +142,20 @@ def format_players(room_name: str, players: List[Dict[str, Any]]) -> Message:
     return Message("\n".join(lines))
 
 
+def format_player_list(room_name: str, players: List[Dict[str, Any]]) -> Message:
+    """
+    兼容旧接口: format_player_list
+
+    Args:
+        room_name: 房间名称
+        players: 玩家列表
+
+    Returns:
+        Message: 格式化的消息
+    """
+    return format_players(room_name, players)
+
+
 def format_backups(room_name: str, backups: List[Dict[str, Any]]) -> Message:
     """
     格式化备份列表
@@ -189,6 +203,33 @@ def format_backups(room_name: str, backups: List[Dict[str, Any]]) -> Message:
         lines.append("💡 使用 /dst backup restore <房间ID> <序号> 恢复备份")
     
     return Message("\n".join(lines))
+
+
+def format_backup_list(room_name: str, backups: List[Dict[str, Any]]) -> Message:
+    """
+    兼容旧接口: format_backup_list
+
+    Args:
+        room_name: 房间名称
+        backups: 备份列表
+
+    Returns:
+        Message: 格式化的消息
+    """
+    return format_backups(room_name, backups)
+
+
+def format_loading(message: str = "处理中...") -> Message:
+    """
+    格式化加载中消息
+
+    Args:
+        message: 自定义提示
+
+    Returns:
+        Message: 格式化的消息
+    """
+    return Message(f"⏳ {message}")
 
 
 def format_error(message: str) -> Message:
@@ -247,9 +288,12 @@ __all__ = [
     "format_room_list",
     "format_room_detail",
     "format_players",
+    "format_player_list",
     "format_backups",
+    "format_backup_list",
     "format_error",
     "format_success",
     "format_info",
     "format_warning",
+    "format_loading",
 ]

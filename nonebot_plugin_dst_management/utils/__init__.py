@@ -2,7 +2,7 @@
 工具函数模块
 """
 
-from .permission import is_admin, is_managed_group, check_admin
+from .permission import check_admin, check_group, check_permission
 from .formatter import (
     format_room_list,
     format_room_detail,
@@ -16,9 +16,9 @@ from .formatter import (
 )
 
 __all__ = [
-    "is_admin",
-    "is_managed_group",
     "check_admin",
+    "check_group",
+    "check_permission",
     "format_room_list",
     "format_room_detail",
     "format_player_list",
