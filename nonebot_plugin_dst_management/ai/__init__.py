@@ -17,6 +17,7 @@ from .base import (
     format_ai_error,
 )
 from .client import AIClient, ClaudeProvider, MockProvider, OllamaProvider, OpenAIProvider
+from .analyzer import ServerConfigAnalyzer
 from .config import AIConfig
 
 __all__ = [
@@ -35,5 +36,6 @@ __all__ = [
     "MockProvider",
     "OllamaProvider",
     "OpenAIProvider",
+    "ServerConfigAnalyzer",
     "AIConfig",
 ]

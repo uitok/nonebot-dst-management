@@ -9,6 +9,7 @@ from nonebot.plugin import PluginMetadata
 
 from .config import DSTConfig, Config, get_dst_config
 from .client.api_client import DSTApiClient
+from .ai.client import AIClient
 
 __plugin_meta__ = PluginMetadata(
     name="DST服务器管理",
@@ -37,6 +38,9 @@ __plugin_meta__ = PluginMetadata(
   /dst mod remove <房间ID> <世界ID> <模组ID> - 删除模组 🔒
   /dst mod check <房间ID>       - 检测模组冲突
 
+AI 功能：
+  /dst analyze <房间ID>         - AI 配置分析
+
 控制台：
   /dst console <房间ID> [世界ID] <命令> - 执行控制台命令 🔒
   /dst announce <房间ID> <消息> - 发送全服公告 🔒
@@ -56,12 +60,14 @@ driver = get_driver()
 
 # 全局 API 客户端
 _api_client: DSTApiClient = None
+_ai_client: AIClient = None
 
 
 @driver.on_startup
 async def init_client():
     """初始化 API 客户端"""
     global _api_client
+    global _ai_client
     config = get_dst_config()
     
     _api_client = DSTApiClient(
@@ -69,9 +75,11 @@ async def init_client():
         token=config.dst_api_token,
         timeout=config.dst_timeout
     )
+
+    _ai_client = AIClient(config.get_ai_config())
     
     # 加载命令处理器
-    from .handlers import room, player, backup, mod, console, archive
+    from .handlers import room, player, backup, mod, console, archive, ai_analyze
     
     room.init(_api_client)
     player.init(_api_client)
@@ -79,14 +87,18 @@ async def init_client():
     mod.init(_api_client)
     console.init(_api_client)
     archive.init(_api_client)
+    ai_analyze.init(_api_client, _ai_client)
 
 
 @driver.on_shutdown
 async def close_client():
     """关闭 API 客户端"""
     global _api_client
+    global _ai_client
     if _api_client:
         await _api_client.close()
+    if _ai_client:
+        await _ai_client.close()
 
 
 def get_api_client() -> DSTApiClient:

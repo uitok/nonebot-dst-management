@@ -5,7 +5,9 @@ DMP API 客户端
 """
 
 import os
-from typing import Any, Dict, List, Optional
+import json
+import re
+from typing import Any, Dict, List, Optional, Tuple
 from loguru import logger
 import httpx
 
@@ -173,6 +175,40 @@ class DSTApiClient:
             params={"roomID": room_id}
         )
 
+    async def get_room_mods(self, room_id: int) -> Dict[str, Any]:
+        """
+        获取房间模组列表（解析 modData）
+
+        Args:
+            room_id: 房间 ID
+
+        Returns:
+            Dict[str, Any]: 模组数据（enabled/disabled/duplicates/raw）
+        """
+        room_result = await self.get_room_info(room_id)
+        if not room_result.get("success"):
+            return room_result
+
+        room_data = room_result.get("data") or {}
+        mod_data = room_data.get("modData", "") or ""
+
+        enabled, disabled = self._parse_mod_data(mod_data)
+        counts: Dict[str, int] = {}
+        for mod_id in re.findall(r"workshop-\d+", mod_data):
+            counts[mod_id] = counts.get(mod_id, 0) + 1
+        duplicates = [mod_id for mod_id, count in counts.items() if count > 1]
+
+        return {
+            "success": True,
+            "data": {
+                "enabled": enabled,
+                "disabled": disabled,
+                "duplicates": duplicates,
+                "raw": mod_data,
+            },
+            "message": "success",
+        }
+
     # ========== 玩家管理 ==========
 
     async def get_online_players(self, room_id: int) -> Dict[str, Any]:
@@ -182,6 +218,30 @@ class DSTApiClient:
             "/room/player/online",
             params={"roomID": room_id}
         )
+
+    async def get_room_stats(self, room_id: int) -> Dict[str, Any]:
+        """
+        获取房间玩家统计（若无独立接口则从在线列表推断）
+
+        Args:
+            room_id: 房间 ID
+
+        Returns:
+            Dict[str, Any]: 玩家统计信息
+        """
+        result = await self.get_online_players(room_id)
+        if not result.get("success"):
+            return result
+
+        players = result.get("data") or []
+        return {
+            "success": True,
+            "data": {
+                "online_players": len(players),
+                "players": players,
+            },
+            "message": "success",
+        }
 
     async def update_player_list(
         self,
@@ -197,6 +257,69 @@ class DSTApiClient:
             "listType": list_type,
             "type": action
         })
+
+    @staticmethod
+    def _parse_mod_data(mod_data: str) -> Tuple[List[str], List[str]]:
+        """解析 modData 内容，返回 (enabled, disabled) 模组列表。"""
+        enabled: List[str] = []
+        disabled: List[str] = []
+
+        if not mod_data:
+            return enabled, disabled
+
+        seen = set()
+
+        def add_mod(mod_id: str, is_enabled: bool) -> None:
+            if mod_id in seen:
+                return
+            seen.add(mod_id)
+            if is_enabled:
+                enabled.append(mod_id)
+            else:
+                disabled.append(mod_id)
+
+        # 1) 尝试解析 JSON
+        try:
+            data = json.loads(mod_data)
+            if isinstance(data, dict):
+                for key, value in data.items():
+                    if not isinstance(key, str) or not key.startswith("workshop-"):
+                        continue
+                    is_enabled = True
+                    if isinstance(value, dict) and "enabled" in value:
+                        is_enabled = bool(value.get("enabled"))
+                    add_mod(key, is_enabled)
+            elif isinstance(data, list):
+                for item in data:
+                    if not isinstance(item, dict):
+                        continue
+                    mod_id = item.get("id") or item.get("mod_id") or item.get("modId")
+                    if not mod_id:
+                        continue
+                    mod_id = str(mod_id)
+                    if not mod_id.startswith("workshop-"):
+                        mod_id = f"workshop-{mod_id}"
+                    is_enabled = bool(item.get("enabled", True))
+                    add_mod(mod_id, is_enabled)
+        except Exception:
+            pass
+
+        # 2) 尝试解析 Lua 风格 modoverrides
+        lua_pattern = re.compile(
+            r'\["(workshop-\d+)"\]\s*=\s*\{[^}]*?enabled\s*=\s*(true|false)',
+            re.IGNORECASE | re.DOTALL,
+        )
+        for match in lua_pattern.finditer(mod_data):
+            mod_id = match.group(1)
+            is_enabled = match.group(2).lower() == "true"
+            add_mod(mod_id, is_enabled)
+
+        # 3) 兜底：仅提取 workshop- 前缀 ID
+        if not enabled and not disabled:
+            for mod_id in re.findall(r"workshop-\d+", mod_data):
+                add_mod(mod_id, True)
+
+        return enabled, disabled
 
     # ========== 备份管理 ==========
 
