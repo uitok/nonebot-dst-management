@@ -27,7 +27,12 @@ def init(api_client: DSTApiClient):
     """
     
     # ========== 查看在线玩家 ==========
-    players_cmd = on_command("dst players", priority=10, block=True)
+    players_cmd = on_command(
+        "dst players",
+        aliases={"dst 玩家列表", "dst 在线玩家"},
+        priority=10,
+        block=True
+    )
     
     @players_cmd.handle()
     async def handle_players(event: MessageEvent, args: Message = CommandArg()):
@@ -64,7 +69,12 @@ def init(api_client: DSTApiClient):
         await players_cmd.finish(message)
     
     # ========== 踢出玩家 ==========
-    kick_cmd = on_command("dst kick", priority=10, block=True)
+    kick_cmd = on_command(
+        "dst kick",
+        aliases={"dst 踢出玩家", "dst 踢人"},
+        priority=10,
+        block=True
+    )
     
     @kick_cmd.handle()
     async def handle_kick(bot: Bot, event: MessageEvent, args: Message = CommandArg()):

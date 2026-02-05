@@ -153,7 +153,12 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
     parser = ModConfigParser(api_client, ai_client) if ai_client else None
 
     # ========== 搜索模组 ==========
-    mod_search = on_command("dst mod search", priority=10, block=True)
+    mod_search = on_command(
+        "dst mod search",
+        aliases={"dst 模组搜索", "dst 搜索模组"},
+        priority=10,
+        block=True
+    )
 
     @mod_search.handle()
     async def handle_mod_search(event: MessageEvent, args: Message = CommandArg()):
@@ -183,7 +188,12 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
         await mod_search.finish(message)
 
     # ========== 查看已安装模组 ==========
-    mod_list = on_command("dst mod list", priority=10, block=True)
+    mod_list = on_command(
+        "dst mod list",
+        aliases={"dst 模组列表", "dst 已安装模组"},
+        priority=10,
+        block=True
+    )
 
     @mod_list.handle()
     async def handle_mod_list(event: MessageEvent, args: Message = CommandArg()):
@@ -208,7 +218,12 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
         await mod_list.finish(_format_mod_list(room_id, enabled, disabled))
 
     # ========== 添加模组 ==========
-    mod_add = on_command("dst mod add", priority=10, block=True)
+    mod_add = on_command(
+        "dst mod add",
+        aliases={"dst 添加模组", "dst 安装模组"},
+        priority=10,
+        block=True
+    )
 
     @mod_add.handle()
     async def handle_mod_add(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
@@ -270,7 +285,12 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
         await mod_add.finish(format_success("模组添加成功，房间重启后生效"))
 
     # ========== 删除模组 ==========
-    mod_remove = on_command("dst mod remove", priority=10, block=True)
+    mod_remove = on_command(
+        "dst mod remove",
+        aliases={"dst 移除模组", "dst 删除模组"},
+        priority=10,
+        block=True
+    )
 
     @mod_remove.handle()
     async def handle_mod_remove(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
@@ -306,7 +326,12 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
             await mod_remove.finish(format_error(f"移除失败：{result.get('error')}"))
 
     # ========== 检测模组冲突 ==========
-    mod_check = on_command("dst mod check", priority=10, block=True)
+    mod_check = on_command(
+        "dst mod check",
+        aliases={"dst 检测模组", "dst 模组检测"},
+        priority=10,
+        block=True
+    )
 
     @mod_check.handle()
     async def handle_mod_check(event: MessageEvent, args: Message = CommandArg()):

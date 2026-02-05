@@ -40,9 +40,28 @@ return {
     archive_bytes = _make_archive_bytes(mod_content)
     response = json.dumps(
         {
-            "status": "valid",
-            "warnings": [],
-            "suggestions": ["ok"],
+            "status": "warn",
+            "summary": {
+                "mod_count": 1,
+                "issue_count": 1,
+                "critical_count": 0,
+                "suggestion_count": 1,
+            },
+            "issues": [
+                {
+                    "level": "warning",
+                    "mod_id": "workshop-123",
+                    "mod_name": "测试模组",
+                    "issue_type": "missing",
+                    "title": "缺少关键配置项",
+                    "description": "缺少 show_max",
+                    "impact": "血量显示不完整",
+                    "current_value": None,
+                    "suggested_value": True,
+                    "reason": "需要显示最大血量",
+                    "config_path": "configuration_options.show_max",
+                }
+            ],
             "optimized_config": mod_content.strip(),
         }
     )
@@ -54,9 +73,12 @@ return {
     parser = ModConfigParser(DummyApiClient(archive_bytes), ai_client)
     result = await parser.parse_mod_config(2, "Master")
 
-    assert "模组配置解析报告" in result["report"]
+    assert "模组配置诊断报告" in result["report"]
     assert "workshop-123" in result["report"]
     assert "optimized_config" in result
+    assert result["status"] in ("warn", "valid", "error")
+    assert "summary" in result
+    assert "issues" in result
 
 
 @pytest.mark.asyncio
@@ -71,7 +93,7 @@ async def test_parse_mod_config_fallback_on_error() -> None:
     parser = ModConfigParser(DummyApiClient(archive_bytes), ai_client)
     result = await parser.parse_mod_config(3, "Master")
 
-    assert "模组配置解析报告" in result["report"]
+    assert "模组配置诊断报告" in result["report"]
     assert "AI 分析失败" in result["report"]
 
 

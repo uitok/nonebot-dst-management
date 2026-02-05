@@ -46,10 +46,17 @@ __plugin_meta__ = PluginMetadata(
   /dst mod remove <房间ID> <世界ID> <模组ID> - 删除模组 🔒
   /dst mod check <房间ID>       - 检测模组冲突
 
+默认房间：
+  /dst 默认房间 <房间ID>        - 设置默认房间
+  /dst 查看默认                 - 查看默认房间
+  /dst 清除默认                 - 清除默认房间
+
 AI 功能：
   /dst analyze <房间ID>         - AI 配置分析
   /dst mod recommend <房间ID> [类型] - AI 模组推荐
   /dst mod parse <房间ID> <世界ID> - AI 模组配置解析
+  /dst mod config show <房间ID> <世界ID> - 查看模组诊断报告
+  /dst mod config apply <房间ID> <世界ID> [--auto] [--dry-run] - 应用优化配置 🔒
   /dst mod config save <房间ID> <世界ID> --optimized - 保存优化配置 🔒
   /dst archive analyze <文件>    - AI 存档分析
   /dst ask <问题>                - AI 智能问答
@@ -60,6 +67,7 @@ AI 功能：
 
 🔒 标记的命令需要管理员权限
 
+提示：设置默认房间后，大部分命令可省略房间ID参数
 使用 /dst help 查看完整帮助
 """,
     type="application",
@@ -82,7 +90,7 @@ async def init_client():
     global _api_client
     global _ai_client
     config = get_dst_config()
-    
+
     _api_client = DSTApiClient(
         base_url=config.dst_api_url,
         token=config.dst_api_token,
@@ -90,7 +98,7 @@ async def init_client():
     )
 
     _ai_client = AIClient(config.get_ai_config())
-    
+
     # 加载命令处理器
     from .handlers import (
         room,
@@ -102,10 +110,12 @@ async def init_client():
         ai_analyze,
         ai_recommend,
         ai_mod_parse,
+        ai_mod_apply,
         ai_archive,
         ai_qa,
+        default_room,
     )
-    
+
     room.init(_api_client)
     player.init(_api_client)
     backup.init(_api_client)
@@ -115,8 +125,10 @@ async def init_client():
     ai_analyze.init(_api_client, _ai_client)
     ai_recommend.init(_api_client, _ai_client)
     ai_mod_parse.init(_api_client, _ai_client)
-    ai_archive.init(_ai_client)
-    ai_qa.init(_ai_client)
+    ai_mod_apply.init(_api_client, _ai_client)
+    ai_archive.init(_api_client)
+    ai_qa.init(_api_client)
+    default_room.init(_api_client, _ai_client)
 
 
 @driver.on_shutdown
@@ -133,7 +145,7 @@ async def close_client():
 def get_api_client() -> DSTApiClient:
     """
     获取 API 客户端实例
-    
+
     Returns:
         DSTApiClient: API 客户端实例
     """

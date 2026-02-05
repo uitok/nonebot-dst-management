@@ -27,7 +27,12 @@ def init(api_client: DSTApiClient):
     """
     
     # ========== 查看备份列表 ==========
-    backup_list = on_command("dst backup list", priority=10, block=True)
+    backup_list = on_command(
+        "dst backup list",
+        aliases={"dst 备份列表"},
+        priority=10,
+        block=True
+    )
     
     @backup_list.handle()
     async def handle_backup_list(event: MessageEvent, args: Message = CommandArg()):
@@ -64,7 +69,12 @@ def init(api_client: DSTApiClient):
         await backup_list.finish(message)
     
     # ========== 创建备份 ==========
-    backup_create = on_command("dst backup create", priority=10, block=True)
+    backup_create = on_command(
+        "dst backup create",
+        aliases={"dst 创建备份", "dst 备份创建"},
+        priority=10,
+        block=True
+    )
     
     @backup_create.handle()
     async def handle_backup_create(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
@@ -93,7 +103,12 @@ def init(api_client: DSTApiClient):
             await backup_create.finish(format_error(f"备份创建失败：{result['error']}"))
     
     # ========== 恢复备份 ==========
-    backup_restore = on_command("dst backup restore", priority=10, block=True)
+    backup_restore = on_command(
+        "dst backup restore",
+        aliases={"dst 恢复备份", "dst 备份恢复"},
+        priority=10,
+        block=True
+    )
     
     @backup_restore.handle()
     async def handle_backup_restore(bot: Bot, event: MessageEvent, args: Message = CommandArg()):

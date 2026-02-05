@@ -41,12 +41,13 @@ class ModConfigParser:
         ai_client: AI 客户端
     """
 
+    _shared_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
     _cache: Dict[str, Tuple[float, Dict[str, Any]]]
 
     def __init__(self, api_client: DSTApiClient, ai_client: AIClient) -> None:
         self.api_client = api_client
         self.ai_client = ai_client
-        self._cache = {}
+        self._cache = ModConfigParser._shared_cache
 
     async def parse_mod_config(self, room_id: int, world_id: str) -> Dict[str, Any]:
         """
@@ -58,8 +59,11 @@ class ModConfigParser:
 
         Returns:
             Dict[str, Any]: {
-                "report": str,
+                "status": str,
+                "summary": dict,
+                "issues": list,
                 "optimized_config": str,
+                "report": str,
                 "cached": bool,
             }
         """
@@ -78,15 +82,25 @@ class ModConfigParser:
                 [{"role": "user", "content": prompt}],
                 system_prompt=system_prompt,
             )
-            report, optimized = self._build_ai_report(response, parsed)
+            status, summary, issues, report, optimized = self._build_ai_report(response, parsed)
         except AIError as exc:
             logger.warning("AI 模组配置解析失败，回退本地报告：{err}", err=exc)
-            report, optimized = self._build_fallback_report(room_id, world_id, parsed, exc)
+            status, summary, issues, report, optimized = self._build_fallback_report(
+                room_id, world_id, parsed, exc
+            )
         except Exception as exc:
             logger.exception("模组配置解析发生未知错误：{err}", err=exc)
-            report, optimized = self._build_fallback_report(room_id, world_id, parsed, exc)
+            status, summary, issues, report, optimized = self._build_fallback_report(
+                room_id, world_id, parsed, exc
+            )
 
-        result = {"report": report, "optimized_config": optimized}
+        result = {
+            "status": status,
+            "summary": summary,
+            "issues": issues,
+            "optimized_config": optimized,
+            "report": report,
+        }
         self._set_cached(cache_key, result)
         return {**result, "cached": False}
 
@@ -97,6 +111,18 @@ class ModConfigParser:
         if not cached:
             return None
         return cached.get("optimized_config")
+
+    def get_cached_result(self, room_id: int, world_id: str) -> Optional[Dict[str, Any]]:
+        """获取缓存中的完整分析结果。"""
+        cache_key = f"{room_id}:{world_id.lower()}"
+        cached = self._get_cached(cache_key, ttl=3600)
+        if not cached:
+            return None
+        return dict(cached)
+
+    async def fetch_modoverrides(self, room_id: int, world_id: str) -> str:
+        """获取指定房间/世界的 modoverrides.lua 原始内容。"""
+        return await self._fetch_modoverrides(room_id, world_id)
 
     async def _fetch_modoverrides(self, room_id: int, world_id: str) -> str:
         """通过存档下载获取 modoverrides.lua 内容。"""
@@ -496,39 +522,74 @@ class ModConfigParser:
         }
 
         return (
-            "你是 DST 模组配置专家，请分析以下 modoverrides.lua 配置并输出优化报告。\n\n"
+            "你是 DST 模组配置诊断专家，请分析以下 modoverrides.lua 配置并给出详细诊断与建议。\n\n"
             f"输入数据(JSON)：\n{json.dumps(payload, ensure_ascii=True, indent=2)}\n\n"
             "要求：\n"
-            "1. 输出 JSON，包含 status, warnings, suggestions, optimized_config。\n"
+            "1. 只输出 JSON（不要包含额外说明或 Markdown）。\n"
             "2. status 为 valid/warn/error。\n"
-            "3. warnings 为数组，每项包含 mod_id, issue, suggestion。\n"
-            "4. optimized_config 为完整 Lua 配置文本。\n"
+            "3. 输出格式：\n"
+            "{\n"
+            "  \"status\": \"valid\" | \"warn\" | \"error\",\n"
+            "  \"summary\": {\n"
+            "    \"mod_count\": int,\n"
+            "    \"issue_count\": int,\n"
+            "    \"critical_count\": int,\n"
+            "    \"suggestion_count\": int\n"
+            "  },\n"
+            "  \"issues\": [\n"
+            "    {\n"
+            "      \"level\": \"critical\" | \"warning\" | \"info\",\n"
+            "      \"mod_id\": \"workshop-xxxx\",\n"
+            "      \"mod_name\": \"模组名称\",\n"
+            "      \"issue_type\": \"missing\" | \"conflict\" | \"invalid\" | \"performance\" | \"other\",\n"
+            "      \"title\": \"问题标题\",\n"
+            "      \"description\": \"问题描述\",\n"
+            "      \"impact\": \"影响\",\n"
+            "      \"current_value\": \"当前值\",\n"
+            "      \"suggested_value\": \"建议值\",\n"
+            "      \"reason\": \"修改理由\",\n"
+            "      \"config_path\": \"配置路径\"\n"
+            "    }\n"
+            "  ],\n"
+            "  \"optimized_config\": \"完整 Lua 配置文本\"\n"
+            "}\n"
         )
 
     def _system_prompt(self) -> str:
         return "你是 DST 模组配置专家，擅长语法校验、冲突检测与优化建议。"
 
-    def _build_ai_report(self, response: str, parsed: ParsedModConfig) -> Tuple[str, str]:
+    def _build_ai_report(
+        self,
+        response: str,
+        parsed: ParsedModConfig,
+    ) -> Tuple[str, Dict[str, Any], List[Dict[str, Any]], str, str]:
         data = self._extract_json(response)
         if not isinstance(data, dict):
             raise ValueError("AI 响应格式错误")
 
-        status = data.get("status") or "warn"
-        warnings = data.get("warnings") or []
-        suggestions = data.get("suggestions") or []
+        status = self._normalize_status(data.get("status"))
         optimized = data.get("optimized_config")
         if not isinstance(optimized, str):
             optimized = self._build_optimized_config(parsed.mods)
 
+        if "issues" in data or "summary" in data:
+            issues = self._normalize_issues(data.get("issues"))
+            summary = self._build_summary(parsed, issues, data.get("summary"))
+        else:
+            warnings = data.get("warnings") or []
+            suggestions = data.get("suggestions") or []
+            issues = self._convert_legacy_issues(warnings, suggestions)
+            summary = self._build_summary(parsed, issues, None)
+
         report = self._render_report(
-            status=str(status),
+            status=status,
             parsed=parsed,
-            warnings=warnings,
-            suggestions=suggestions,
+            summary=summary,
+            issues=issues,
             optimized=optimized,
             ai_error=None,
         )
-        return report, optimized
+        return status, summary, issues, report, optimized
 
     def _build_fallback_report(
         self,
@@ -536,42 +597,48 @@ class ModConfigParser:
         world_id: str,
         parsed: ParsedModConfig,
         error: Exception,
-    ) -> Tuple[str, str]:
+    ) -> Tuple[str, Dict[str, Any], List[Dict[str, Any]], str, str]:
         suggestions = [
             "检查配置是否包含无效字段",
             "减少不必要的模组选项以提升稳定性",
             "保持配置文件格式统一",
         ]
+        issues = self._convert_legacy_issues([], suggestions)
         optimized = self._build_optimized_config(parsed.mods)
+        status = "warn" if parsed.warnings else "valid"
+        summary = self._build_summary(parsed, issues, None)
         report = self._render_report(
-            status="warn" if parsed.warnings else "valid",
+            status=status,
             parsed=parsed,
-            warnings=[],
-            suggestions=suggestions,
+            summary=summary,
+            issues=issues,
             optimized=optimized,
             ai_error=error,
         )
-        return report, optimized
+        return status, summary, issues, report, optimized
 
     def _render_report(
         self,
         status: str,
         parsed: ParsedModConfig,
-        warnings: List[Dict[str, Any]],
-        suggestions: List[Any],
+        summary: Dict[str, Any],
+        issues: List[Dict[str, Any]],
         optimized: str,
         ai_error: Optional[Exception],
     ) -> str:
         status_label = {
             "valid": "✅ 有效",
-            "warn": "⚠️ 警告",
+            "warn": "⚠️ 有问题需关注",
             "error": "❌ 错误",
         }.get(status, "⚠️ 警告")
 
-        lines = ["📄 模组配置解析报告", "", "🔍 解析结果："]
+        lines = ["📄 模组配置诊断报告", "", "🔍 配置概览："]
         lines.append(f"- 状态：{status_label}")
-        lines.append(f"- 已配置模组：{parsed.mod_count} 个")
+        lines.append(f"- 已配置模组：{summary.get('mod_count', parsed.mod_count)} 个")
         lines.append(f"- 总配置项：{parsed.option_count} 个")
+        lines.append(f"- 问题数量：{summary.get('issue_count', len(issues))} 个")
+        lines.append(f"- 严重问题：{summary.get('critical_count', 0)} 个")
+        lines.append(f"- 建议项：{summary.get('suggestion_count', 0)} 个")
 
         if parsed.warnings:
             lines.append("")
@@ -579,28 +646,57 @@ class ModConfigParser:
             for item in parsed.warnings:
                 lines.append(f"- {item}")
 
-        if warnings:
-            lines.append("")
-            lines.append("⚠️ 配置警告：")
-            for idx, warn in enumerate(warnings, 1):
-                mod_id = warn.get("mod_id") if isinstance(warn, dict) else "未知模组"
-                issue = warn.get("issue") if isinstance(warn, dict) else str(warn)
-                suggestion = warn.get("suggestion") if isinstance(warn, dict) else ""
-                lines.append(f"{idx}. [{mod_id}] {issue}")
-                if suggestion:
-                    lines.append(f"   💡 {suggestion}")
+        grouped = {"critical": [], "warning": [], "info": []}
+        for issue in issues:
+            level = self._normalize_issue_level(issue.get("level"))
+            issue["level"] = level
+            grouped[level].append(issue)
 
-        if suggestions:
+        if any(grouped.values()):
             lines.append("")
-            lines.append("💡 优化建议：")
-            for idx, item in enumerate(suggestions, 1):
-                lines.append(f"{idx}. {item}")
+            lines.append("❌ 发现的问题：")
+            level_titles = {
+                "critical": "❌ 严重问题",
+                "warning": "⚠️ 警告问题",
+                "info": "ℹ️ 建议优化",
+            }
+            for level in ("critical", "warning", "info"):
+                items = grouped[level]
+                if not items:
+                    continue
+                lines.append("")
+                lines.append(level_titles[level])
+                for idx, issue in enumerate(items, 1):
+                    mod_name = issue.get("mod_name") or issue.get("mod_id") or "未知模组"
+                    title = issue.get("title") or issue.get("issue_type") or "配置问题"
+                    description = issue.get("description") or "未提供"
+                    impact = issue.get("impact") or "未提供"
+                    current_value = self._format_issue_value(issue.get("current_value"))
+                    suggested_value = self._format_issue_value(issue.get("suggested_value"))
+                    reason = issue.get("reason") or "未提供"
+                    config_path = issue.get("config_path") or ""
+                    lines.append(f"{idx}. 【{mod_name}】{title}")
+                    lines.append(f"   - 描述：{description}")
+                    lines.append(f"   - 影响：{impact}")
+                    lines.append(f"   - 当前值：{current_value}")
+                    lines.append(f"   - 建议值：{suggested_value}")
+                    lines.append(f"   - 修改理由：{reason}")
+                    if config_path:
+                        lines.append(f"   - 配置路径：{config_path}")
+        else:
+            lines.append("")
+            lines.append("✅ 未发现明显问题")
 
         lines.append("")
         lines.append("📋 优化后的配置：")
         lines.append("```lua")
         lines.append(optimized)
         lines.append("```")
+
+        lines.append("")
+        lines.append("🚀 如何应用配置：")
+        lines.append("- 使用 /dst mod config save <房间ID> <世界ID> --optimized 保存优化配置")
+        lines.append("- 应用后请重启房间以生效")
 
         if ai_error is not None:
             lines.append("")
@@ -696,3 +792,148 @@ class ModConfigParser:
 
     def _set_cached(self, cache_key: str, value: Dict[str, Any]) -> None:
         self._cache[cache_key] = (time.monotonic(), value)
+
+    def _normalize_status(self, value: Any) -> str:
+        text = str(value or "").strip().lower()
+        if text in ("valid", "ok", "success"):
+            return "valid"
+        if text in ("error", "fail", "failed", "critical"):
+            return "error"
+        if text in ("warn", "warning", "warnings"):
+            return "warn"
+        return "warn"
+
+    def _normalize_issue_level(self, value: Any) -> str:
+        text = str(value or "").strip().lower()
+        if text in ("critical", "error", "high", "severe"):
+            return "critical"
+        if text in ("warn", "warning", "medium"):
+            return "warning"
+        if text in ("info", "low", "suggestion", "hint"):
+            return "info"
+        return "warning"
+
+    def _normalize_issues(self, value: Any) -> List[Dict[str, Any]]:
+        if not isinstance(value, list):
+            return []
+        issues: List[Dict[str, Any]] = []
+        for item in value:
+            if not isinstance(item, dict):
+                issues.append(
+                    {
+                        "level": "warning",
+                        "mod_id": "",
+                        "mod_name": "",
+                        "issue_type": "other",
+                        "title": str(item),
+                        "description": "",
+                        "impact": "",
+                        "current_value": None,
+                        "suggested_value": None,
+                        "reason": "",
+                        "config_path": "",
+                    }
+                )
+                continue
+            issues.append(
+                {
+                    "level": item.get("level") or "warning",
+                    "mod_id": str(item.get("mod_id") or ""),
+                    "mod_name": str(item.get("mod_name") or ""),
+                    "issue_type": str(item.get("issue_type") or "other"),
+                    "title": str(item.get("title") or ""),
+                    "description": str(item.get("description") or ""),
+                    "impact": str(item.get("impact") or ""),
+                    "current_value": item.get("current_value"),
+                    "suggested_value": item.get("suggested_value"),
+                    "reason": str(item.get("reason") or ""),
+                    "config_path": str(item.get("config_path") or ""),
+                }
+            )
+        return issues
+
+    def _build_summary(
+        self,
+        parsed: ParsedModConfig,
+        issues: List[Dict[str, Any]],
+        summary: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        critical_count = sum(
+            1 for issue in issues if self._normalize_issue_level(issue.get("level")) == "critical"
+        )
+        suggestion_count = sum(
+            1
+            for issue in issues
+            if issue.get("suggested_value") not in (None, "")
+            or self._normalize_issue_level(issue.get("level")) == "info"
+        )
+        result = {
+            "mod_count": parsed.mod_count,
+            "issue_count": len(issues),
+            "critical_count": critical_count,
+            "suggestion_count": suggestion_count,
+        }
+        if isinstance(summary, dict):
+            for key in result:
+                value = summary.get(key)
+                if isinstance(value, int):
+                    result[key] = value
+        return result
+
+    def _convert_legacy_issues(
+        self,
+        warnings: List[Any],
+        suggestions: List[Any],
+    ) -> List[Dict[str, Any]]:
+        issues: List[Dict[str, Any]] = []
+        for warn in warnings:
+            if isinstance(warn, dict):
+                mod_id = warn.get("mod_id") or ""
+                title = warn.get("issue") or warn.get("title") or "配置问题"
+                suggestion = warn.get("suggestion") or ""
+            else:
+                mod_id = ""
+                title = str(warn)
+                suggestion = ""
+            issues.append(
+                {
+                    "level": "warning",
+                    "mod_id": str(mod_id),
+                    "mod_name": "",
+                    "issue_type": "other",
+                    "title": str(title),
+                    "description": "",
+                    "impact": "",
+                    "current_value": None,
+                    "suggested_value": suggestion or None,
+                    "reason": "",
+                    "config_path": "",
+                }
+            )
+        for suggestion in suggestions:
+            issues.append(
+                {
+                    "level": "info",
+                    "mod_id": "",
+                    "mod_name": "",
+                    "issue_type": "suggestion",
+                    "title": str(suggestion),
+                    "description": "",
+                    "impact": "",
+                    "current_value": None,
+                    "suggested_value": None,
+                    "reason": "",
+                    "config_path": "",
+                }
+            )
+        return issues
+
+    def _format_issue_value(self, value: Any) -> str:
+        if value is None:
+            return "未提供"
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, (int, float)):
+            return str(value)
+        return str(value)
+

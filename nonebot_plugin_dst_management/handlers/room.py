@@ -28,7 +28,12 @@ def init(api_client: DSTApiClient):
     """
     
     # ========== 查看房间列表 ==========
-    room_list = on_command("dst list", priority=10, block=True)
+    room_list = on_command(
+        "dst list",
+        aliases={"dst 房间列表", "dst 列表"},
+        priority=10,
+        block=True
+    )
     
     @room_list.handle()
     async def handle_room_list(event: MessageEvent, args: Message = CommandArg()):
@@ -58,7 +63,12 @@ def init(api_client: DSTApiClient):
         await room_list.finish(message)
     
     # ========== 查看房间详情 ==========
-    room_info = on_command("dst info", priority=10, block=True)
+    room_info = on_command(
+        "dst info",
+        aliases={"dst 房间详情", "dst 详情"},
+        priority=10,
+        block=True
+    )
     
     @room_info.handle()
     async def handle_room_info(event: MessageEvent, args: Message = CommandArg()):
