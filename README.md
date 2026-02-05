@@ -1,85 +1,96 @@
 # nonebot-dst-management
 
-> 一个实用的 DST 饥荒联机版服务器管理插件
+一个实用的 DST 饥荒联机版服务器管理插件
 
-基于 NoneBot2 和 DMP API 实现，提供房间管理、玩家管理、模组管理、备份管理等功能，并内置 AI 智能助手。
+基于 NoneBot2 和 DMP API 实现，帮你在 QQ/TG 上管理服务器。
 
-## 功能特点
+## 能做什么
 
-- 🏠 **房间管理** - 启动、停止、重启服务器
-- 👥 **玩家管理** - 踢人、禁言、管理白名单
-- 📦 **模组管理** - 搜索、安装、配置模组
-- 💾 **备份管理** - 创建、恢复、管理存档备份
-- 🤖 **AI 助手** - 配置分析、模组推荐、智能问答
-- 🌍 **中文命令** - 支持中文命令别名
-- ⚡ **默认房间** - 设置常用房间，省略参数
+- 房间管理 - 启动、停止、重启服务器
+- 玩家管理 - 踢人、禁言、管理白名单
+- 模组管理 - 搜索、安装、配置模组
+- 备份管理 - 创建、恢复、管理存档备份
+- AI 助手 - 配���分析、模组推荐、智能问答
+- 中文命令 - 支持中文命令，更方便
+- 默认房间 - 设置常用房间，省得每次都输 ID
 
-## 安装
+## 快速开始
+
+### 安装
 
 ```bash
 nb plugin install nonebot-plugin-dst-management
 ```
 
-或使用 pip：
+或
 
 ```bash
 pip install nonebot-plugin-dst-management
 ```
 
-## 配置
+### 配置
 
-在 NoneBot 项目的 `.env` 文件中添加：
+在 `.env` 文件中添加：
 
 ```bash
-# DMP API 配置
 DST_API_URL=http://your-dmp-api-url
 DST_API_TOKEN=your_jwt_token
-DST_TIMEOUT=10
-
-# 管理员配置
 DST_ADMIN_USERS=["your_qq_number"]
 ```
 
-## 快速开始
-
-### 1. 房间管理
+### 基本用法
 
 ```bash
-/dst list              # 查看房间列表
-/dst info 2            # 查看房间 2 的详情
-/dst start 2           # 启动房间
+# 查看房间
+/dst list
+
+# 查看详情
+/dst info 2
+
+# 启动服务器
+/dst start 2
+
+# 查看玩家
+/dst players 2
+
+# 踢人
+/dst kick 2 KU_xxx
+
+# 搜索模组
+/dst mod search 健康条
+
+# 安装模组
+/dst mod add 2 1 123456789
 ```
 
-### 2. 玩家管理
+## ��文命令
+
+所有高频命令都支持中文：
 
 ```bash
-/dst 玩家列表 2        # 查看在线玩家
-/dst 踢出玩家 2 KU_xxx # 踢出玩家
-```
-
-### 3. 模组管理
-
-```bash
+/dst 房间列表          # 查看房间
+/dst 玩家列表 2        # 查看玩家
 /dst 模组搜索 健康条   # 搜索模组
-/dst 模组列表 2        # 查看已安装模组
 /dst 添加模组 2 1 123456789  # 安装模组
 ```
 
-### 4. 默认房间
+## 默认房间
+
+如果你主要管理一个房间，可以设为默认：
 
 ```bash
-/dst 默认房间 2        # 设置默认房间
-/dst 玩家列表          # 之后可以省略房间 ID
+/dst 默认房间 2
 ```
 
-### 5. AI 功能
+之后大部分命令不用输房间 ID：
 
 ```bash
-/dst ask 冬天基地怎么搭？     # 智能问答
-/dst 模组推荐 2 生存          # AI 模组推荐
+/dst 玩家列表          # 自动用房间 2
+/dst 模组列表          # 自动用房间 2
+/dst 创建备份          # 自动用房间 2
 ```
 
-## 命令列表
+## 完整命令
 
 ### 房间管理
 
@@ -87,24 +98,20 @@ DST_ADMIN_USERS=["your_qq_number"]
 |------|------|
 | `/dst list [页码]` | 查看房间列表 |
 | `/dst info <房间ID>` | 查看房间详情 |
-| `/dst start <房间ID>` | 启动房间 🔒 |
-| `/dst stop <房间ID>` | 停止房间 🔒 |
-| `/dst restart <房间ID>` | 重启房间 🔒 |
+| `/dst start <房间ID>` | 启动房间 |
+| `/dst stop <房间ID>` | 停止房间 |
+| `/dst restart <房间ID>` | 重启房间 |
 
-**中文别名**：
-- `/dst 房间列表` → list
-- `/dst 房间详情` → info
+中文别名：`房间列表`、`房间详情`
 
 ### 玩家管理
 
 | 命令 | 说明 |
 |------|------|
 | `/dst players <房间ID>` | 查看在线玩家 |
-| `/dst kick <房间ID> <KU_ID>` | 踢出玩家 🔒 |
+| `/dst kick <房间ID> <KU_ID>` | 踢出玩家 |
 
-**中文别名**：
-- `/dst 玩家列表` → players
-- `/dst 踢出玩家` → kick
+中文别名：`玩家列表`、`踢出玩家`
 
 ### 模组管理
 
@@ -112,29 +119,21 @@ DST_ADMIN_USERS=["your_qq_number"]
 |------|------|
 | `/dst mod search <关键词>` | 搜索模组 |
 | `/dst mod list <房间ID>` | 查看已安装模组 |
-| `/dst mod add <房间ID> <世界ID> <模组ID>` | 添加模组 🔒 |
-| `/dst mod remove <房间ID> <世界ID> <模组ID>` | 删除模组 🔒 |
+| `/dst mod add <房间ID> <世界ID> <模组ID>` | 添加模组 |
+| `/dst mod remove <房间ID> <世界ID> <模组ID>` | 删除模组 |
 | `/dst mod check <房间ID>` | 检测模组冲突 |
 
-**中文别名**：
-- `/dst 模组搜索` → mod search
-- `/dst 模组列表` → mod list
-- `/dst 添加模组` → mod add
-- `/dst 移除模组` → mod remove
-- `/dst 检测模组` → mod check
+中文别名：`模组搜索`、`模组列表`、`添加模组`、`移除模组`、`检测模组`
 
 ### 备份管理
 
 | 命令 | 说明 |
 |------|------|
 | `/dst backup list <房间ID>` | 查看备份列表 |
-| `/dst backup create <房间ID>` | 创建备份 🔒 |
-| `/dst backup restore <房间ID> <文件名>` | 恢复备份 🔒 |
+| `/dst backup create <房间ID>` | 创建备份 |
+| `/dst backup restore <房间ID> <文件名>` | 恢复备份 |
 
-**中文别名**：
-- `/dst 备份列表` → backup list
-- `/dst 创建备份` → backup create
-- `/dst 恢复备份` → backup restore
+中文别名：`备份列表`、`创建备份`、`恢复备份`
 
 ### 默认房间
 
@@ -154,50 +153,7 @@ DST_ADMIN_USERS=["your_qq_number"]
 | `/dst archive analyze <文件>` | AI 存档分析 |
 | `/dst ask <问题>` | AI 智能问答 |
 
-🔒 标记的命令需要管理员权限
-
-## 使用技巧
-
-### 设置默认房间
-
-如果主要管理某一个房间，可以设置默认房间：
-
-```bash
-/dst 默认房间 2
-```
-
-之后大部分命令可以省略房间 ID：
-
-```bash
-/dst 玩家列表          # 相当于 /dst players 2
-/dst 模组列表          # 相当于 /dst mod list 2
-/dst 创建备份          # 相当于 /dst backup create 2
-```
-
-### 使用中文命令
-
-所有高频命令都支持中文别名：
-
-```bash
-# 英文命令
-/dst mod list 2
-
-# 中文命令
-/dst 模组列表 2
-```
-
-效果完全一样，用哪个看你习惯。
-
-### 组合使用
-
-默认房间 + 中文命令 = 超简洁：
-
-```bash
-/dst 默认房间 2
-/dst 玩家列表          # 查看房间 2 的玩家
-/dst 模组列表          # 查看房间 2 的模组
-/dst 创建备份          # 为房间 2 创建备份
-```
+AI 功能是可选的，需要配置 API Key。
 
 ## 环境要求
 
@@ -205,33 +161,15 @@ DST_ADMIN_USERS=["your_qq_number"]
 - NoneBot2 2.3.0+
 - DMP API 服务器
 
-## 依赖安装
-
-```bash
-pip install nonebot2[fastapi]
-pip install nonebot-plugin-dst-management
-```
-
-## 开发
-
-```bash
-git clone https://github.com/uitok/nonebot-dst-management.git
-cd nonebot-dst-management
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-pytest
-```
-
 ## 常见问题
 
-### Q: 如何获取 DMP API Token？
+**Q: 怎么获取 DMP API Token？**
 
-A: 登录你的 DMP 管理后台，在设置中找到 API Token。
+A: 登录 DMP 管理后台，在设置里找 API Token。
 
-### Q: AI 功能怎么配置？
+**Q: AI 功能怎么用？**
 
-A: AI 功能是可选的。如果需要，在 `.env` 中添加：
+A: AI 功能是可选的。要使用的话在 `.env` 中配置：
 
 ```bash
 AI_ENABLED=true
@@ -240,9 +178,13 @@ AI_API_KEY=your_openai_key
 AI_MODEL=gpt-4
 ```
 
-### Q: 默认房间保存在哪里？
+**Q: 默认房间重启后还有吗？**
 
-A: 当前保存在内存中，重启后需要重新设置。后续版本会支持持久化存储。
+A: 当前保存在内存中，重启后需要重新设置。后续版本会支持持久化。
+
+**Q: 中文命令和英文命令有什么区别？**
+
+A: 没有区别，功能完全一样，看你喜欢用哪个。
 
 ## 更新日志
 
@@ -259,8 +201,6 @@ A: 当前保存在内存中，重启后需要重新设置。后续版本会支�
 - Lua 解析安全修复
 - 推荐结果验证
 
-查看完整更新日志：[CHANGELOG.md](CHANGELOG.md)
-
 ## 许可证
 
 MIT License
@@ -271,6 +211,5 @@ MIT License
 
 ## 链接
 
-- [GitHub](https://github.com/uitok/nonebot-dst-management)
-- [文档](https://github.com/uitok/nonebot-dst-management/blob/main/docs/README.md)
-- [问题反馈](https://github.com/uitok/nonebot-dst-management/issues)
+- GitHub: https://github.com/uitok/nonebot-dst-management
+- 问题反馈: https://github.com/uitok/nonebot-dst-management/issues
