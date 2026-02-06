@@ -163,10 +163,10 @@ async def test_sign_command_use_default_room(monkeypatch):
     async def allow_group(event):
         return True
 
-    async def resolve_room_id(_qq_id, _room_arg):
-        return 1
+    async def fake_resolve_room_id(_event, _room_arg):
+        return type("RoomResolution", (), {"room_id": 1})()
 
-    monkeypatch.setattr(sign_handler.default_room, "resolve_room_id", resolve_room_id)
+    monkeypatch.setattr(sign_handler, "resolve_room_id", fake_resolve_room_id)
 
     sign_result = type("Result", (), {"success": True, "message": "签到成功", "user": None})()
     monkeypatch.setattr(sign_handler, "check_group", allow_group)

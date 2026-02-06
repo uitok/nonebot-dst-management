@@ -59,6 +59,7 @@ USER_SETTINGS_TABLE = """
 CREATE TABLE IF NOT EXISTS user_settings (
     qq_id TEXT PRIMARY KEY,
     default_room_id INTEGER,
+    last_room_id INTEGER,
     ui_mode TEXT,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -223,6 +224,7 @@ async def init_db() -> None:
         )
     )
     await _ensure_sign_records_status()
+    await _ensure_user_settings_last_room_id()
     await _ensure_user_settings_ui_mode()
 
 
@@ -239,6 +241,12 @@ async def _ensure_user_settings_ui_mode() -> None:
     columns = {row["name"] for row in rows}
     if "ui_mode" not in columns:
         await execute("ALTER TABLE user_settings ADD COLUMN ui_mode TEXT")
+
+async def _ensure_user_settings_last_room_id() -> None:
+    rows = await fetch_all("PRAGMA table_info(user_settings)")
+    columns = {row["name"] for row in rows}
+    if "last_room_id" not in columns:
+        await execute("ALTER TABLE user_settings ADD COLUMN last_room_id INTEGER")
 
 
 
@@ -593,6 +601,48 @@ async def clear_user_ui_mode(qq_id: str) -> int:
         """
         UPDATE user_settings
         SET ui_mode = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE qq_id = ?
+        """,
+        (qq_id,),
+    )
+
+
+async def set_user_last_room(qq_id: str, room_id: int) -> int:
+    """设置用户/群组最近操作房间（存在则更新）。"""
+    return await execute(
+        """
+        INSERT INTO user_settings (qq_id, last_room_id, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(qq_id)
+        DO UPDATE SET last_room_id = excluded.last_room_id,
+                      updated_at = CURRENT_TIMESTAMP
+        """,
+        (qq_id, room_id),
+    )
+
+
+async def get_user_last_room(qq_id: str) -> Optional[int]:
+    """获取用户/群组最近操作房间。"""
+    row = await fetch_one(
+        """
+        SELECT last_room_id
+        FROM user_settings
+        WHERE qq_id = ?
+        """,
+        (qq_id,),
+    )
+    if not row:
+        return None
+    return row["last_room_id"]
+
+
+async def clear_user_last_room(qq_id: str) -> int:
+    """清除用户/群组最近操作房间。"""
+    return await execute(
+        """
+        UPDATE user_settings
+        SET last_room_id = NULL,
             updated_at = CURRENT_TIMESTAMP
         WHERE qq_id = ?
         """,

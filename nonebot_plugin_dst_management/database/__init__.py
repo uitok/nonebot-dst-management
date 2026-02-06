@@ -41,6 +41,9 @@ from .models import (
     set_user_ui_mode,
     get_user_ui_mode,
     clear_user_ui_mode,
+    set_user_last_room,
+    get_user_last_room,
+    clear_user_last_room,
 )
 
 __all__ = [
@@ -80,4 +83,7 @@ __all__ = [
     "set_user_ui_mode",
     "get_user_ui_mode",
     "clear_user_ui_mode",
+    "set_user_last_room",
+    "get_user_last_room",
+    "clear_user_last_room",
 ]

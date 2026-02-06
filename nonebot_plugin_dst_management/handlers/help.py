@@ -17,14 +17,13 @@ Keep this file UI-only (no API calls).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 from nonebot import on_command
 from nonebot.adapters.onebot.v11 import Message, MessageEvent
 from nonebot.params import CommandArg
 
-from ..helpers.formatters import ICON_TIP, format_error, format_info
-from ..utils.permission import check_group
+from ..helpers.formatters import ICON_TIP, detect_bot_family, format_info
 
 
 @dataclass(frozen=True)
@@ -134,6 +133,33 @@ def _help_main_menu() -> Message:
     ]
     return Message("\n".join(lines).strip())
 
+
+def _help_main_menu_markdown() -> Message:
+    # Keep it simple and predictable for QQ markdown rendering.
+    lines: list[str] = [
+        "# DST 管理帮助",
+        "",
+        "## 🏠 基础管理",
+        "- 📋 房间列表: `/dst list`",
+        "- 🔎 房间详情: `/dst info`",
+        "- 🚀 启动 / 🛑 关闭 / 🔄 重启: `/dst start|stop|restart` (🔒)",
+        "",
+        "## 👥 玩家管理",
+        "- 👥 在线玩家: `/dst players`",
+        "- 🦶 踢出玩家: `/dst kick` (🔒)",
+        "",
+        "## 📦 备份与模组",
+        "- 💾 备份: `/dst backup list|create|restore` (🔒)",
+        "- 🧩 模组: `/dst mod search|list|add|remove|check` (🔒)",
+        "",
+        "## ⚙️ 系统设置",
+        "- 📌 默认房间: `/dst 默认房间` / `/dst 查看默认` / `/dst 清除默认`",
+        "- 🔍 自动发现: `/dst room scan` (🔒)",
+        "- 📥 导入发现: `/dst room import ...` (🔒)",
+        "",
+        f"{ICON_TIP} 发送 `/dst help 基础|玩家|备份|设置` 查看完整用法",
+    ]
+    return Message("\n".join(lines).strip())
 
 def _help_base() -> Message:
     items = [
@@ -323,50 +349,57 @@ def _help_settings() -> Message:
     return Message("\n".join(lines).strip())
 
 
-HELP_CMD = on_command(
-    "dst help",
-    aliases={"dst 帮助", "dst 菜单", "dst 帮助菜单", "dst 指令", "dst 指令菜单", "dst 命令"},
-    priority=5,
-    block=True,
-)
+def init() -> None:
+    """Register help command matcher."""
 
-
-@HELP_CMD.handle()
-async def handle_help(event: MessageEvent, args: Message = CommandArg()):
-    if not await check_group(event):
-        await HELP_CMD.finish(format_error("当前群组未授权使用此功能"))
-        return
-
-    raw = args.extract_plain_text().strip()
-    if not raw:
-        await HELP_CMD.finish(_help_main_menu())
-        return
-
-    category = _resolve_category(raw)
-    if category == "base":
-        await HELP_CMD.finish(_help_base())
-        return
-    if category == "player":
-        await HELP_CMD.finish(_help_player())
-        return
-    if category == "backup_mod":
-        await HELP_CMD.finish(_help_backup_mod())
-        return
-    if category == "settings":
-        await HELP_CMD.finish(_help_settings())
-        return
-
-    await HELP_CMD.finish(
-        format_info(
-            f"未找到模块：{raw}\n{ICON_TIP} 可用：基础 / 玩家 / 备份 / 设置（或 base/player/backup/settings）"
-        )
+    help_cmd = on_command(
+        "dst help",
+        aliases={"dst 帮助", "dst 菜单", "dst 帮助菜单", "dst 指令", "dst 指令菜单", "dst 命令"},
+        priority=5,
+        block=True,
     )
 
+    @help_cmd.handle()
+    async def handle_help(bot: Any, event: MessageEvent, args: Message = CommandArg()):
+        # NOTE: `args` can be a NoneBot Param in tests when called directly.
+        raw = ""
+        if hasattr(args, "extract_plain_text"):
+            try:
+                extracted = args.extract_plain_text()
+                if isinstance(extracted, str):
+                    raw = extracted.strip()
+            except Exception:
+                raw = ""
 
-__all__ = ["HELP_CMD", "handle_help"]
+        family = detect_bot_family(bot, event)
 
+        if not raw:
+            await help_cmd.finish(
+                _help_main_menu_markdown() if family == "qq" else _help_main_menu()
+            )
+            return
 
-def init() -> None:
-    """Compatibility initializer (commands are registered at import time)."""
+        category = _resolve_category(raw)
+        if category == "base":
+            await help_cmd.finish(_help_base())
+            return
+        if category == "player":
+            await help_cmd.finish(_help_player())
+            return
+        if category == "backup_mod":
+            await help_cmd.finish(_help_backup_mod())
+            return
+        if category == "settings":
+            await help_cmd.finish(_help_settings())
+            return
+
+        await help_cmd.finish(
+            format_info(
+                f"未找到模块：{raw}\n{ICON_TIP} 可用：基础 / 玩家 / 备份 / 设置（或 base/player/backup/settings）"
+            )
+        )
 
     return None
+
+
+__all__ = ["init"]

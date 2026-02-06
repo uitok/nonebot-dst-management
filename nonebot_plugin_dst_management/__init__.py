@@ -11,6 +11,63 @@ from .config import DSTConfig, Config, get_dst_config
 from .client.api_client import DSTApiClient
 from .ai.client import AIClient
 
+
+def _register_smart_preprocessor() -> None:
+    """Register fuzzy command normalizer (Phase B Smart).
+
+    In unit tests, `nonebot` is commonly mocked and may not be a real package.
+    In that case we skip registration silently.
+    """
+
+    try:
+        from nonebot.message import event_preprocessor  # type: ignore
+    except Exception:
+        return
+
+    from typing import Any
+
+    from .helpers.fuzzy import normalize_command_text
+
+    @event_preprocessor  # type: ignore[misc]
+    async def _dst_smart_preprocessor(event: Any) -> None:
+        raw = getattr(event, "raw_message", None)
+        if not isinstance(raw, str):
+            # Best-effort for adapters without raw_message.
+            msg = getattr(event, "message", None)
+            if msg is not None and hasattr(msg, "extract_plain_text"):
+                try:
+                    raw = str(msg.extract_plain_text())
+                except Exception:
+                    raw = None
+
+        if not isinstance(raw, str) or not raw.strip():
+            return
+
+        normalized = normalize_command_text(raw)
+        if not normalized or normalized == raw:
+            return
+
+        # Update raw_message
+        if hasattr(event, "raw_message"):
+            try:
+                setattr(event, "raw_message", normalized)
+            except Exception:
+                pass
+
+        # Update message for OneBot v11-style events (and other adapters where Message(text) works).
+        msg_obj = getattr(event, "message", None)
+        if msg_obj is None:
+            return
+        try:
+            msg_cls = type(msg_obj)
+            setattr(event, "message", msg_cls(normalized))
+        except Exception:
+            # Keep raw_message update only.
+            return
+
+
+_register_smart_preprocessor()
+
 __version__ = "0.3.0"
 
 __plugin_meta__ = PluginMetadata(

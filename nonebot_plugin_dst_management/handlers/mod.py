@@ -25,6 +25,7 @@ from ..helpers.formatters import (
     format_info,
     format_warning,
 )
+from ..helpers.room_context import RoomSource, remember_room, resolve_room_id
 
 
 def _normalize_mod_id(mod_id: str) -> Tuple[str, str]:
@@ -203,12 +204,22 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
             await mod_list.finish(format_error("当前群组未授权使用此功能"))
             return
 
-        room_id_str = args.extract_plain_text().strip()
-        if not room_id_str.isdigit():
-            await mod_list.finish(format_error("请提供有效的房间ID：/dst mod list <房间ID>"))
+        room_arg = args.extract_plain_text().strip()
+        resolved = await resolve_room_id(event, room_arg if room_arg else None)
+        if resolved is None:
+            if room_arg:
+                await mod_list.finish(format_error("请提供有效的房间ID：/dst mod list <房间ID>"))
+            else:
+                await mod_list.finish(
+                    format_error("请提供房间ID：/dst mod list <房间ID>\n或先使用一次带房间ID的命令以锁定房间")
+                )
             return
 
-        room_id = int(room_id_str)
+        room_id = int(resolved.room_id)
+        if resolved.source == RoomSource.LAST:
+            await mod_list.send(format_info(f"未指定房间ID，使用上次操作的房间 {room_id}..."))
+        elif resolved.source == RoomSource.DEFAULT:
+            await mod_list.send(format_info(f"未指定房间ID，使用默认房间 {room_id}..."))
         room_result = await api_client.get_room_info(room_id)
         if not room_result.get("success"):
             await mod_list.finish(format_error(f"获取房间信息失败：{room_result.get('error')}"))
@@ -224,6 +235,7 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
 
         mod_data = room_result.get("data", {}).get("modData", "")
         enabled, disabled = _parse_mod_data(mod_data)
+        await remember_room(event, room_id)
         await mod_list.finish(_format_mod_list(room_id, enabled, disabled))
 
     # ========== 添加模组 ==========
@@ -349,12 +361,22 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
             await mod_check.finish(format_error("当前群组未授权使用此功能"))
             return
 
-        room_id_str = args.extract_plain_text().strip()
-        if not room_id_str.isdigit():
-            await mod_check.finish(format_error("请提供有效的房间ID：/dst mod check <房间ID>"))
+        room_arg = args.extract_plain_text().strip()
+        resolved = await resolve_room_id(event, room_arg if room_arg else None)
+        if resolved is None:
+            if room_arg:
+                await mod_check.finish(format_error("请提供有效的房间ID：/dst mod check <房间ID>"))
+            else:
+                await mod_check.finish(
+                    format_error("请提供房间ID：/dst mod check <房间ID>\n或先使用一次带房间ID的命令以锁定房间")
+                )
             return
 
-        room_id = int(room_id_str)
+        room_id = int(resolved.room_id)
+        if resolved.source == RoomSource.LAST:
+            await mod_check.send(format_info(f"未指定房间ID，使用上次操作的房间 {room_id}..."))
+        elif resolved.source == RoomSource.DEFAULT:
+            await mod_check.send(format_info(f"未指定房间ID，使用默认房间 {room_id}..."))
         room_result = await api_client.get_room_info(room_id)
         if not room_result.get("success"):
             await mod_check.finish(format_error(f"获取房间信息失败：{room_result.get('error')}"))
@@ -388,6 +410,7 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
 
         lines.append("")
         lines.append("💡 如需生效，请重启房间")
+        await remember_room(event, room_id)
         await mod_check.finish(Message("\n".join(lines)))
 
     # ========== 保存模组配置 ==========

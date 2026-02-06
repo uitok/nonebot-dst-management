@@ -13,6 +13,7 @@ from nonebot.adapters.onebot.v11 import Bot, MessageEvent, Message
 from nonebot.params import CommandArg
 
 from ..client.api_client import DSTApiClient
+from ..helpers.room_context import RoomSource, remember_room, resolve_room_id
 from ..services.archive_service import ArchiveService, ArchiveInfo
 from ..utils.permission import check_admin, check_group
 from ..utils.formatter import (
@@ -75,12 +76,36 @@ def init(api_client: DSTApiClient):
             await archive_upload.finish(format_error("只有管理员才能执行此操作"))
             return
 
-        parsed = _extract_room_and_source(args.extract_plain_text())
-        if not parsed:
-            await archive_upload.finish(format_error("用法：/dst archive upload <房间ID> <文件URL或文件路径>"))
+        raw = args.extract_plain_text().strip()
+        if not raw:
+            await archive_upload.finish(
+                format_error("用法：/dst archive upload <房间ID> <文件URL或文件路径>\n或：/dst archive upload <文件URL或文件路径>")
+            )
             return
 
-        room_id, source = parsed
+        parsed = _extract_room_and_source(raw)
+        resolved = None
+        if parsed:
+            room_id, source = parsed
+        else:
+            resolved = await resolve_room_id(event, None)
+            if resolved is None:
+                await archive_upload.finish(
+                    format_error("请提供房间ID或先使用一次带房间ID的命令以锁定房间")
+                )
+                return
+            room_id = int(resolved.room_id)
+            # Treat the whole raw text as source.
+            parsed2 = _extract_room_and_source(f"{room_id} {raw}")
+            if not parsed2:
+                await archive_upload.finish(format_error("用法：/dst archive upload <房间ID> <文件URL或文件路径>"))
+                return
+            _, source = parsed2
+
+        if resolved and resolved.source == RoomSource.LAST:
+            await archive_upload.send(format_info(f"未指定房间ID，使用上次操作的房间 {room_id}..."))
+        elif resolved and resolved.source == RoomSource.DEFAULT:
+            await archive_upload.send(format_info(f"未指定房间ID，使用默认房间 {room_id}..."))
 
         await archive_upload.send(format_info("正在准备存档文件..."))
         prepared = await service.prepare_archive(source)
@@ -120,6 +145,7 @@ def init(api_client: DSTApiClient):
             await archive_upload.send(format_info("正在上传存档..."))
             result = await api_client.upload_archive(room_id, archive_path)
             if result.get("success"):
+                await remember_room(event, room_id)
                 await archive_upload.finish(format_success("存档上传成功"))
             else:
                 await archive_upload.finish(format_error(f"存档上传失败：{result.get('error')}"))
@@ -137,12 +163,24 @@ def init(api_client: DSTApiClient):
             await archive_download.finish(format_error("当前群组未授权使用此功能"))
             return
 
-        room_id_str = args.extract_plain_text().strip()
-        if not room_id_str.isdigit():
-            await archive_download.finish(format_error("请提供有效的房间ID：/dst archive download <房间ID>"))
+        room_arg = args.extract_plain_text().strip()
+        resolved = await resolve_room_id(event, room_arg if room_arg else None)
+        if resolved is None:
+            if room_arg:
+                await archive_download.finish(
+                    format_error("请提供有效的房间ID：/dst archive download <房间ID>")
+                )
+            else:
+                await archive_download.finish(
+                    format_error("请提供房间ID：/dst archive download <房间ID>\n或先使用一次带房间ID的命令以锁定房间")
+                )
             return
 
-        room_id = int(room_id_str)
+        room_id = int(resolved.room_id)
+        if resolved.source == RoomSource.LAST:
+            await archive_download.send(format_info(f"未指定房间ID，使用上次操作的房间 {room_id}..."))
+        elif resolved.source == RoomSource.DEFAULT:
+            await archive_download.send(format_info(f"未指定房间ID，使用默认房间 {room_id}..."))
 
         if not hasattr(api_client, "download_archive"):
             await archive_download.finish(format_error("当前 API 客户端未实现存档下载"))
@@ -180,6 +218,7 @@ def init(api_client: DSTApiClient):
         else:
             lines.append("\n⚠️ 未获取到下载链接，请联系管理员")
 
+        await remember_room(event, room_id)
         await archive_download.finish(Message("\n".join(lines)))
 
     # ========== 替换存档 ==========
@@ -194,12 +233,35 @@ def init(api_client: DSTApiClient):
             await archive_replace.finish(format_error("只有管理员才能执行此操作"))
             return
 
-        parsed = _extract_room_and_source(args.extract_plain_text())
-        if not parsed:
-            await archive_replace.finish(format_error("用法：/dst archive replace <房间ID> <文件URL或文件路径>"))
+        raw = args.extract_plain_text().strip()
+        if not raw:
+            await archive_replace.finish(
+                format_error("用法：/dst archive replace <房间ID> <文件URL或文件路径>\n或：/dst archive replace <文件URL或文件路径>")
+            )
             return
 
-        room_id, source = parsed
+        parsed = _extract_room_and_source(raw)
+        resolved = None
+        if parsed:
+            room_id, source = parsed
+        else:
+            resolved = await resolve_room_id(event, None)
+            if resolved is None:
+                await archive_replace.finish(
+                    format_error("请提供房间ID或先使用一次带房间ID的命令以锁定房间")
+                )
+                return
+            room_id = int(resolved.room_id)
+            parsed2 = _extract_room_and_source(f"{room_id} {raw}")
+            if not parsed2:
+                await archive_replace.finish(format_error("用法：/dst archive replace <房间ID> <文件URL或文件路径>"))
+                return
+            _, source = parsed2
+
+        if resolved and resolved.source == RoomSource.LAST:
+            await archive_replace.send(format_info(f"未指定房间ID，使用上次操作的房间 {room_id}..."))
+        elif resolved and resolved.source == RoomSource.DEFAULT:
+            await archive_replace.send(format_info(f"未指定房间ID，使用默认房间 {room_id}..."))
 
         await archive_replace.send(format_info("正在准备存档文件..."))
         prepared = await service.prepare_archive(source)
@@ -235,6 +297,7 @@ def init(api_client: DSTApiClient):
             await archive_replace.send(format_info("正在替换存档..."))
             result = await api_client.replace_archive(room_id, archive_path)
             if result.get("success"):
+                await remember_room(event, room_id)
                 await archive_replace.finish(format_success("存档替换成功"))
             else:
                 await archive_replace.finish(format_error(f"存档替换失败：{result.get('error')}"))

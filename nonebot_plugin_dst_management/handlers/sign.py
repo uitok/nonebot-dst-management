@@ -17,16 +17,16 @@ from nonebot.params import CommandArg
 
 from ..client.api_client import DSTApiClient
 from ..helpers.commands import parse_room_id
+from ..helpers.room_context import remember_room, resolve_room_id
 from ..services.monitors.sign_monitor import get_sign_monitor
 from ..services.sign_service import SignService
 from ..utils.formatter import format_error, format_info, format_success
 from ..utils.permission import check_group
-from . import default_room
 
 
 async def _resolve_room_id(event: MessageEvent, room_arg: Optional[str]) -> Optional[int]:
-    qq_id = str(event.user_id)
-    return await default_room.resolve_room_id(qq_id, room_arg)
+    resolved = await resolve_room_id(event, room_arg)
+    return int(resolved.room_id) if resolved is not None else None
 
 
 def init(api_client: DSTApiClient):
@@ -61,7 +61,7 @@ def init(api_client: DSTApiClient):
         room_arg = parts[1] if len(parts) > 1 else None
         room_id = await _resolve_room_id(event, room_arg)
         if room_id is None:
-            await sign_bind_cmd.finish(format_error("请提供有效的房间ID或先设置默认房间"))
+            await sign_bind_cmd.finish(format_error("请提供房间ID，或先使用一次带房间ID的命令以锁定房间，或设置默认房间"))
             return
 
         result = await service.bind_user(str(event.user_id), ku_id, room_id)
@@ -69,6 +69,7 @@ def init(api_client: DSTApiClient):
             await sign_bind_cmd.finish(format_error(result.message))
             return
 
+        await remember_room(event, room_id)
         await sign_bind_cmd.finish(format_success(f"{result.message}，房间ID：{room_id}"))
 
     sign_unbind_cmd = on_command(
@@ -87,7 +88,7 @@ def init(api_client: DSTApiClient):
         text = args.extract_plain_text().strip()
         room_id = await _resolve_room_id(event, text if text else None)
         if room_id is None:
-            await sign_unbind_cmd.finish(format_error("请提供房间ID或先设置默认房间"))
+            await sign_unbind_cmd.finish(format_error("请提供房间ID，或先使用一次带房间ID的命令以锁定房间，或设置默认房间"))
             return
 
         await sign_unbind_cmd.send(format_info("正在解绑..."))
@@ -100,6 +101,7 @@ def init(api_client: DSTApiClient):
             await sign_unbind_cmd.finish(format_error(result.message))
             return
 
+        await remember_room(event, room_id)
         await sign_unbind_cmd.finish(format_success(f"{result.message}，房间ID：{room_id}"))
 
     sign_cmd = on_command(
@@ -133,7 +135,7 @@ def init(api_client: DSTApiClient):
             room_id = await _resolve_room_id(event, None)
 
         if room_id is None:
-            await sign_cmd.finish(format_error("请提供房间ID或先设置默认房间"))
+            await sign_cmd.finish(format_error("请提供房间ID，或先使用一次带房间ID的命令以锁定房间，或设置默认房间"))
             return
 
         await sign_cmd.send(format_info("正在签到..."))
@@ -154,4 +156,5 @@ def init(api_client: DSTApiClient):
             except Exception:
                 pass
 
+        await remember_room(event, room_id)
         await sign_cmd.finish(format_success(result.message))
