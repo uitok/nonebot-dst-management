@@ -68,7 +68,7 @@ def _register_smart_preprocessor() -> None:
 
 _register_smart_preprocessor()
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 __plugin_meta__ = PluginMetadata(
     name="DST服务器管理",
