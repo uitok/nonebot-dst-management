@@ -33,7 +33,35 @@ def setup_nonebot_mock():
     # 设置 get_driver 函数
     mock_driver = MagicMock()
     mock_driver.config = MagicMock()
+    # NoneBot 的生命周期装饰器在插件导入时会被直接当作 decorator 使用。
+    # 测试中让它们成为“透传装饰器”，避免把被装饰函数替换成 MagicMock，
+    # 这样可以在单元测试里直接调用这些函数并提升覆盖率。
+    mock_driver.on_startup = lambda func: func
+    mock_driver.on_shutdown = lambda func: func
     mock_nonebot.get_driver = MagicMock(return_value=mock_driver)
+
+    # 提供一个可用的 on_command 实现，避免 @cmd.handle() 装饰器把 handler 函数替换成 MagicMock。
+    class DummyCommand:
+        def __init__(self):
+            self.handlers = []
+
+        def handle(self):
+            def decorator(func):
+                self.handlers.append(func)
+                return func
+
+            return decorator
+
+        async def send(self, message):  # pragma: no cover
+            return None
+
+        async def finish(self, message):  # pragma: no cover
+            return None
+
+    def on_command(*args, **kwargs):  # pragma: no cover
+        return DummyCommand()
+
+    mock_nonebot.on_command = on_command
 
     # 注册所有 mock 模块
     sys.modules["nonebot"] = mock_nonebot

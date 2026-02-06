@@ -10,6 +10,7 @@
 - 玩家管理 - 踢人、禁言、管理白名单
 - 模组管理 - 搜索、安装、配置模组
 - 备份管理 - 创建、恢复、管理存档备份
+- 签到系统 - 绑定账号、签到领奖励
 - AI 助手 - 配置分析、模组推荐、智能问答
 - 中文命令 - 支持中文命令，更方便
 - 默认房间 - 设置常用房间，省得每次都输 ID
@@ -47,6 +48,8 @@ DST_ADMIN_USERS=["your_qq_number"]
 /dst players 2         # 查看玩家
 /dst kick 2 KU_xxx     # 踢人
 /dst mod search 健康条 # 搜索模组
+/dst sign bind KU_xxx 2 # 绑定签到账号
+/dst sign 2            # 签到
 ```
 
 ## 中文命令
@@ -120,6 +123,21 @@ DST_ADMIN_USERS=["your_qq_number"]
 | `/dst backup restore <房间ID> <文件名>` | 恢复备份 |
 
 中文别名：`备份列表`、`创建备份`、`恢复备份`
+
+### 签到系统
+
+| 命令 | 说明 |
+|------|------|
+| `/dst sign bind <KU_ID> [房间ID]` | 绑定签到账号 |
+| `/dst sign [房间ID]` | 签到并领取奖励 |
+
+示例：
+```bash
+/dst sign bind KU_ABC123 1
+/dst sign
+```
+
+更多说明见 `docs/SIGN_IN_USER_GUIDE.md`。
 
 ### 默认房间
 

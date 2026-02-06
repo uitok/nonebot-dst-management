@@ -17,8 +17,9 @@ from nonebot.params import CommandArg
 from ..client.api_client import DSTApiClient
 from ..ai.client import AIClient
 from ..ai.mod_parser import ModConfigParser
+from ..services.monitors.sign_monitor import get_sign_monitor
 from ..utils.permission import check_admin, check_group
-from ..utils.formatter import (
+from ..helpers.formatters import (
     format_error,
     format_success,
     format_info,
@@ -155,7 +156,7 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
     # ========== 搜索模组 ==========
     mod_search = on_command(
         "dst mod search",
-        aliases={"dst 模组搜索", "dst 搜索模组"},
+        aliases={"dst 模组搜索", "dst 搜索模组", "dst 找模组"},
         priority=10,
         block=True
     )
@@ -190,7 +191,7 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
     # ========== 查看已安装模组 ==========
     mod_list = on_command(
         "dst mod list",
-        aliases={"dst 模组列表", "dst 已安装模组"},
+        aliases={"dst 模组列表", "dst 已安装模组", "dst 已装模组"},
         priority=10,
         block=True
     )
@@ -213,6 +214,14 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
             await mod_list.finish(format_error(f"获取房间信息失败：{room_result.get('error')}"))
             return
 
+        # ✨ 触发签到奖励检查
+        monitor = get_sign_monitor()
+        if monitor:
+            try:
+                await monitor.check_room_pending_rewards(room_id)
+            except Exception:
+                pass
+
         mod_data = room_result.get("data", {}).get("modData", "")
         enabled, disabled = _parse_mod_data(mod_data)
         await mod_list.finish(_format_mod_list(room_id, enabled, disabled))
@@ -220,7 +229,7 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
     # ========== 添加模组 ==========
     mod_add = on_command(
         "dst mod add",
-        aliases={"dst 添加模组", "dst 安装模组"},
+        aliases={"dst 添加模组", "dst 安装模组", "dst 装模组"},
         priority=10,
         block=True
     )
@@ -287,7 +296,7 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
     # ========== 删除模组 ==========
     mod_remove = on_command(
         "dst mod remove",
-        aliases={"dst 移除模组", "dst 删除模组"},
+        aliases={"dst 移除模组", "dst 删除模组", "dst 卸载模组"},
         priority=10,
         block=True
     )
@@ -328,7 +337,7 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None):
     # ========== 检测模组冲突 ==========
     mod_check = on_command(
         "dst mod check",
-        aliases={"dst 检测模组", "dst 模组检测"},
+        aliases={"dst 检测模组", "dst 模组检测", "dst 冲突检测"},
         priority=10,
         block=True
     )

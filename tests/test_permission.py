@@ -47,7 +47,6 @@ async def test_check_admin_with_superuser(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_check_group(monkeypatch):
-    monkeypatch.setattr(permission, "GroupMessageEvent", DummyGroupEvent)
     monkeypatch.setattr(permission, "get_dst_config", lambda: DummyConfig(admin_groups=[100]))
 
     assert await permission.check_group(DummyEvent(1)) is False
@@ -60,8 +59,6 @@ async def test_check_group(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_check_permission_levels(monkeypatch):
-    monkeypatch.setattr(permission, "GroupMessageEvent", DummyGroupEvent)
-
     async def fake_superuser(bot, event):
         return event.user_id == 1
 

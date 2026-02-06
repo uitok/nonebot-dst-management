@@ -10,11 +10,12 @@ from nonebot.params import CommandArg
 
 from ..client.api_client import DSTApiClient
 from ..utils.permission import check_admin, check_group
-from ..utils.formatter import (
-    format_backups,
+from ..helpers.formatters import (
     format_error,
     format_success,
     format_info,
+    format_warning,
+    render_auto,
 )
 
 
@@ -29,7 +30,7 @@ def init(api_client: DSTApiClient):
     # ========== 查看备份列表 ==========
     backup_list = on_command(
         "dst backup list",
-        aliases={"dst 备份列表"},
+        aliases={"dst 备份列表", "dst 查备份", "dst 查看备份"},
         priority=10,
         block=True
     )
@@ -65,13 +66,18 @@ def init(api_client: DSTApiClient):
         backups = result["data"] or []
         
         # 格式化输出
-        message = format_backups(room_name, backups)
+        message = await render_auto(
+            "backups",
+            event=event,
+            room_name=room_name,
+            backups=backups,
+        )
         await backup_list.finish(message)
     
     # ========== 创建备份 ==========
     backup_create = on_command(
         "dst backup create",
-        aliases={"dst 创建备份", "dst 备份创建"},
+        aliases={"dst 创建备份", "dst 备份创建", "dst 立即备份", "dst 生成备份"},
         priority=10,
         block=True
     )
@@ -105,7 +111,7 @@ def init(api_client: DSTApiClient):
     # ========== 恢复备份 ==========
     backup_restore = on_command(
         "dst backup restore",
-        aliases={"dst 恢复备份", "dst 备份恢复"},
+        aliases={"dst 恢复备份", "dst 备份恢复", "dst 回档", "dst 回档备份"},
         priority=10,
         block=True
     )
@@ -134,7 +140,7 @@ def init(api_client: DSTApiClient):
         
         # 发送确认提示
         await backup_restore.send(
-            format_info(f"⚠️ 即将恢复备份 {filename}，此操作不可撤销！\n确认请发送 \"是\"，取消请发送 \"否\"")
+            format_warning(f"即将恢复备份 {filename}，此操作不可撤销！\n确认请发送 \"是\"，取消请发送 \"否\"")
         )
         
         # 这里应该有一个等待用户确认的逻辑

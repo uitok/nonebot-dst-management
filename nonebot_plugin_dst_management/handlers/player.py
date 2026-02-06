@@ -10,11 +10,11 @@ from nonebot.params import CommandArg
 
 from ..client.api_client import DSTApiClient
 from ..utils.permission import check_admin, check_group
-from ..utils.formatter import (
-    format_players,
+from ..helpers.formatters import (
     format_error,
     format_success,
     format_info,
+    render_auto,
 )
 
 
@@ -29,7 +29,7 @@ def init(api_client: DSTApiClient):
     # ========== 查看在线玩家 ==========
     players_cmd = on_command(
         "dst players",
-        aliases={"dst 玩家列表", "dst 在线玩家"},
+        aliases={"dst 玩家列表", "dst 在线玩家", "dst 查玩家", "dst 查看玩家"},
         priority=10,
         block=True
     )
@@ -65,13 +65,18 @@ def init(api_client: DSTApiClient):
         players = result["data"] or []
         
         # 格式化输出
-        message = format_players(room_name, players)
+        message = await render_auto(
+            "players",
+            event=event,
+            room_name=room_name,
+            players=players,
+        )
         await players_cmd.finish(message)
     
     # ========== 踢出玩家 ==========
     kick_cmd = on_command(
         "dst kick",
-        aliases={"dst 踢出玩家", "dst 踢人"},
+        aliases={"dst 踢出玩家", "dst 踢人", "dst 踢出", "dst 踢玩家"},
         priority=10,
         block=True
     )

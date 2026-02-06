@@ -72,9 +72,10 @@ class DSTApiClient:
             响应数据字典：{ success: bool, data: Any, message: str }
         """
         try:
+            request_path = (path or "").lstrip("/")
             response = await self.client.request(
                 method=method,
-                url=path,
+                url=request_path,
                 json=data,
                 params=params
             )
@@ -367,6 +368,10 @@ class DSTApiClient:
             "/room/player/online",
             params={"roomID": room_id}
         )
+
+    async def get_room_players(self, room_id: int) -> Dict[str, Any]:
+        """获取房间玩家列表（当前实现等同在线玩家）"""
+        return await self.get_online_players(room_id)
 
     async def get_room_stats(self, room_id: int) -> Dict[str, Any]:
         """

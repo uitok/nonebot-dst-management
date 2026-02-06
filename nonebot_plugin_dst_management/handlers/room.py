@@ -9,13 +9,14 @@ from nonebot.adapters.onebot.v11 import Bot, MessageEvent, Message
 from nonebot.params import CommandArg
 
 from ..client.api_client import DSTApiClient
+from ..services.monitors.sign_monitor import get_sign_monitor
 from ..utils.permission import check_admin, check_group
-from ..utils.formatter import (
-    format_room_list,
-    format_room_detail,
+from ..helpers.formatters import (
     format_error,
     format_success,
     format_info,
+    status_badge,
+    render_auto,
 )
 
 
@@ -30,7 +31,7 @@ def init(api_client: DSTApiClient):
     # ========== 查看房间列表 ==========
     room_list = on_command(
         "dst list",
-        aliases={"dst 房间列表", "dst 列表"},
+        aliases={"dst 房间列表", "dst 列表", "dst 查看房间", "dst 查房间", "dst 查房列表"},
         priority=10,
         block=True
     )
@@ -59,13 +60,20 @@ def init(api_client: DSTApiClient):
         total = data.get("totalCount", 0)
         total_pages = max(1, (total + 9) // 10)
         
-        message = format_room_list(rooms, page, total_pages, total)
+        message = await render_auto(
+            "room_list",
+            event=event,
+            rooms=rooms,
+            page=page,
+            total_pages=total_pages,
+            total=total,
+        )
         await room_list.finish(message)
     
     # ========== 查看房间详情 ==========
     room_info = on_command(
         "dst info",
-        aliases={"dst 房间详情", "dst 详情"},
+        aliases={"dst 房间详情", "dst 详情", "dst 房间信息", "dst 查房", "dst 查房间详情", "dst 查详情"},
         priority=10,
         block=True
     )
@@ -102,13 +110,32 @@ def init(api_client: DSTApiClient):
         players = []
         if players_result["success"]:
             players = players_result["data"] or []
+
+        # ✨ 触发签到奖励检查
+        monitor = get_sign_monitor()
+        if monitor:
+            try:
+                await monitor.check_room_pending_rewards(room_id)
+            except Exception:
+                pass
         
         # 格式化输出
-        message = format_room_detail(room_result["data"], worlds, players)
+        message = await render_auto(
+            "room_detail",
+            event=event,
+            room=room_result["data"],
+            worlds=worlds,
+            players=players,
+        )
         await room_info.finish(message)
     
     # ========== 启动房间 ==========
-    room_start = on_command("dst start", priority=10, block=True)
+    room_start = on_command(
+        "dst start",
+        aliases={"dst 启动", "dst 启动房间", "dst 开房", "dst 开启房间", "dst 开服"},
+        priority=10,
+        block=True,
+    )
     
     @room_start.handle()
     async def handle_room_start(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
@@ -132,12 +159,17 @@ def init(api_client: DSTApiClient):
         result = await api_client.activate_room(room_id)
         
         if result["success"]:
-            await room_start.finish(format_success(f"房间 {room_id} 启动成功"))
+            await room_start.finish(format_success(f"房间 {room_id} 启动成功 {status_badge(True)}"))
         else:
             await room_start.finish(format_error(f"启动失败：{result['error']}"))
     
     # ========== 关闭房间 ==========
-    room_stop = on_command("dst stop", priority=10, block=True)
+    room_stop = on_command(
+        "dst stop",
+        aliases={"dst 停止", "dst 停止房间", "dst 关闭", "dst 关闭房间", "dst 关房", "dst 关服"},
+        priority=10,
+        block=True,
+    )
     
     @room_stop.handle()
     async def handle_room_stop(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
@@ -161,12 +193,17 @@ def init(api_client: DSTApiClient):
         result = await api_client.deactivate_room(room_id)
         
         if result["success"]:
-            await room_stop.finish(format_success(f"房间 {room_id} 已关闭"))
+            await room_stop.finish(format_success(f"房间 {room_id} 已关闭 {status_badge(False)}"))
         else:
             await room_stop.finish(format_error(f"关闭失败：{result['error']}"))
     
     # ========== 重启房间 ==========
-    room_restart = on_command("dst restart", priority=10, block=True)
+    room_restart = on_command(
+        "dst restart",
+        aliases={"dst 重启", "dst 重启房间", "dst 重开房间", "dst 一键维护", "dst 维护"},
+        priority=10,
+        block=True,
+    )
     
     @room_restart.handle()
     async def handle_room_restart(bot: Bot, event: MessageEvent, args: Message = CommandArg()):
@@ -190,6 +227,6 @@ def init(api_client: DSTApiClient):
         result = await api_client.restart_room(room_id)
         
         if result["success"]:
-            await room_restart.finish(format_success(f"房间 {room_id} 重启成功"))
+            await room_restart.finish(format_success(f"房间 {room_id} 重启成功 {status_badge(True)}"))
         else:
             await room_restart.finish(format_error(f"重启失败：{result['error']}"))

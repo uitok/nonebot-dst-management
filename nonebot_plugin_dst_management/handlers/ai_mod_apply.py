@@ -140,6 +140,17 @@ def _build_diff(current: str, optimized: str) -> str:
     return "\n".join(diff)
 
 
+def _extract_text(args: Message, event: MessageEvent) -> str:
+    raw = None
+    if hasattr(args, "extract_plain_text"):
+        raw = args.extract_plain_text()
+    if not isinstance(raw, str) and hasattr(event, "extract_plain_text"):
+        raw = event.extract_plain_text()
+    if raw is None:
+        raw = ""
+    return str(raw).strip()
+
+
 def init(api_client: DSTApiClient, ai_client: AIClient) -> None:
     """
     初始化 AI 模组配置应用命令
@@ -161,7 +172,7 @@ def init(api_client: DSTApiClient, ai_client: AIClient) -> None:
             await show_cmd.finish(format_error("当前群组未授权使用此功能"))
             return
 
-        raw = args.extract_plain_text().strip()
+        raw = _extract_text(args, event)
         parsed, error = _parse_args(show_parser, raw)
         if error:
             await show_cmd.finish(error)
@@ -194,7 +205,7 @@ def init(api_client: DSTApiClient, ai_client: AIClient) -> None:
             await apply_cmd.finish(format_error("只有管理员才能执行此操作"))
             return
 
-        raw = args.extract_plain_text().strip()
+        raw = _extract_text(args, event)
         parsed, error = _parse_args(apply_parser, raw)
         if error:
             await apply_cmd.finish(error)

@@ -73,7 +73,7 @@ AI 功能：
     type="application",
     homepage="https://github.com/your-repo/nonebot-dst-management",
     config=Config,
-    supported_adapters={"nonebot.adapters.onebot.v11"},
+    supported_adapters={"nonebot.adapters.onebot.v11", "nonebot.adapters.qq"},
 )
 
 # 获取驱动
@@ -90,6 +90,11 @@ async def init_client():
     global _api_client
     global _ai_client
     config = get_dst_config()
+
+    # Ensure sqlite tables exist before any command touches the database.
+    from .database import init_db
+
+    await init_db()
 
     _api_client = DSTApiClient(
         base_url=config.dst_api_url,
@@ -114,7 +119,16 @@ async def init_client():
         ai_archive,
         ai_qa,
         default_room,
+        sign,
+        help,
+        config_ui,
+        auto_discovery,
     )
+
+    # 初始化签到监视器（触发式，无后台任务）
+    from .services.monitors import sign_monitor
+
+    sign_monitor.init_sign_monitor(_api_client)
 
     room.init(_api_client)
     player.init(_api_client)
@@ -129,6 +143,10 @@ async def init_client():
     ai_archive.init(_api_client)
     ai_qa.init(_api_client)
     default_room.init(_api_client, _ai_client)
+    sign.init(_api_client)
+    help.init()
+    config_ui.init()
+    auto_discovery.init()
 
 
 @driver.on_shutdown
@@ -151,6 +169,8 @@ def get_api_client() -> DSTApiClient:
     """
     return _api_client
 
+
+from .services.monitors import sign_monitor  # noqa: F401
 
 __all__ = [
     "__version__",

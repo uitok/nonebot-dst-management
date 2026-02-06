@@ -6,10 +6,10 @@ from nonebot_plugin_dst_management.handlers import ai_mod_apply as apply_handler
 class DummyMessage:
     """模拟 Message 类"""
     def __init__(self, text: str = "") -> None:
-        self._text = str(text)
+        self.text = str(text)
 
     def extract_plain_text(self) -> str:
-        return self._text
+        return self.text or ""
 
 
 class FakeCommand:
