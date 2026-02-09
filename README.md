@@ -1,215 +1,106 @@
-# nonebot-dst-management
+# nonebot-plugin-dst-management
 
-一个实用的 DST 饥荒联机版服务器管理插件
+nonebot-plugin-dst-management 是一个基于 NoneBot2 的 DST (Don't Starve Together) 服务器管理插件。插件通过 DMP (DST Management Platform) API v3 与服务器交互，提供房间生命周期、玩家、模组、备份/存档等常用管理能力，并可选集成 AI 辅助分析与推荐。
 
-基于 NoneBot2 和 DMP API 实现，帮你在 QQ/TG 上管理服务器。
+## 功能概览
 
-## 能做什么
+- 房间管理：房间列表、详情查询、启动/停止/重启
+- 玩家管理：在线玩家列表、踢出玩家
+- 模组管理：模组搜索、已装模组查询、添加/移除、冲突检测
+- 备份与存档：备份列表、创建/恢复；存档上传/下载/替换与结构校验
+- 控制台：执行控制台命令、发送全服公告
+- 可选能力：签到/奖励、AI 配置分析与模组推荐、中文命令别名与模糊纠错
 
-- 房间管理 - 启动、停止、重启服务器
-- 玩家管理 - 踢人、禁言、管理白名单
-- 模组管理 - 搜索、安装、配置模组
-- 备份管理 - 创建、恢复、管理存档备份
-- 签到系统 - 绑定账号、签到领奖励
-- AI 助手 - 配置分析、模组推荐、智能问答
-- 中文命令 - 支持中文命令，更方便
-- 默认房间 - 设置常用房间，省得每次都输 ID
+## 环境要求
 
-## 快速开始
+- Python >= 3.10
+- NoneBot2 >= 2.3.0
+- 适配器：OneBot v11、QQ 官方适配器
+- 可用的 DMP API v3 服务与访问 Token
 
-### 安装
+## 安装
+
+通过 nb-cli 安装：
 
 ```bash
 nb plugin install nonebot-plugin-dst-management
 ```
 
-或
+或使用 pip：
 
 ```bash
 pip install nonebot-plugin-dst-management
 ```
 
-### 配置
-
-在 `.env` 文件中添加：
+可选依赖：
 
 ```bash
-DST_API_URL=http://your-dmp-api-url
-DST_API_TOKEN=your_jwt_token
-DST_ADMIN_USERS=["your_qq_number"]
+pip install nonebot-plugin-dst-management[ai]
+pip install nonebot-plugin-dst-management[archive]
 ```
 
-### 基本用法
+## 配置
+
+插件会在启动时读取 NoneBot 配置与当前工作目录下的 `.env` (如存在)。常用环境变量如下：
 
 ```bash
-/dst list              # 查看房间
-/dst info 2            # 查看详情
-/dst start 2           # 启动服务器
-/dst players 2         # 查看玩家
-/dst kick 2 KU_xxx     # 踢人
-/dst mod search 健康条 # 搜索模组
-/dst sign bind KU_xxx 2 # 绑定签到账号
-/dst sign 2            # 签到
+# DMP API
+DST_API_URL=http://localhost:8080
+DST_API_TOKEN=your_dmp_token
+DST_TIMEOUT=10
+
+# 权限控制 (逗号分隔的数字 ID)
+DST_ADMIN_USERS=123456789,987654321
+DST_ADMIN_GROUPS=123456789
+
+# 签到数据 (可选，默认 data/dst_sign.db)
+DST_SIGN_DB_PATH=data/dst_sign.db
 ```
 
-## 中文命令
-
-高频命令都支持中文，用起来更顺手：
+AI (可选)：
 
 ```bash
-/dst 房间列表          # 查看房间
-/dst 玩家列表 2        # 查看玩家
-/dst 模组搜索 健康条   # 搜索模组
-/dst 添加模组 2 1 123456789  # 安装模组
-```
-
-## 默认房间
-
-主要管理一个房间的话，设为默认更省事：
-
-```bash
-/dst 默认房间 2
-```
-
-之后大部分命令不用输房间 ID：
-
-```bash
-/dst 玩家列表          # 自动用房间 2
-/dst 模组列表          # 自动用房间 2
-/dst 创建备份          # 自动用房间 2
-```
-
-## 完整命令
-
-### 房间管理
-
-| 命令 | 说明 |
-|------|------|
-| `/dst list [页码]` | 查看房间列表 |
-| `/dst info <房间ID>` | 查看房间详情 |
-| `/dst start <房间ID>` | 启动房间 |
-| `/dst stop <房间ID>` | 停止房间 |
-| `/dst restart <房间ID>` | 重启房间 |
-
-中文别名：`房间列表`、`房间详情`
-
-### 玩家管理
-
-| 命令 | 说明 |
-|------|------|
-| `/dst players <房间ID>` | 查看在线玩家 |
-| `/dst kick <房间ID> <KU_ID>` | 踢出玩家 |
-
-中文别名：`玩家列表`、`踢出玩家`
-
-### 模组管理
-
-| 命令 | 说明 |
-|------|------|
-| `/dst mod search <关键词>` | 搜索模组 |
-| `/dst mod list <房间ID>` | 查看已安装模组 |
-| `/dst mod add <房间ID> <世界ID> <模组ID>` | 添加模组 |
-| `/dst mod remove <房间ID> <世界ID> <模组ID>` | 删除模组 |
-| `/dst mod check <房间ID>` | 检测模组冲突 |
-
-中文别名：`模组搜索`、`模组列表`、`添加模组`、`移除模组`、`检测模组`
-
-### 备份管理
-
-| 命令 | 说明 |
-|------|------|
-| `/dst backup list <房间ID>` | 查看备份列表 |
-| `/dst backup create <房间ID>` | 创建备份 |
-| `/dst backup restore <房间ID> <文件名>` | 恢复备份 |
-
-中文别名：`备份列表`、`创建备份`、`恢复备份`
-
-### 签到系统
-
-| 命令 | 说明 |
-|------|------|
-| `/dst sign bind <KU_ID> [房间ID]` | 绑定签到账号 |
-| `/dst sign [房间ID]` | 签到并领取奖励 |
-
-示例：
-```bash
-/dst sign bind KU_ABC123 1
-/dst sign
-```
-
-更多说明见 `docs/SIGN_IN_USER_GUIDE.md`。
-
-### 默认房间
-
-| 命令 | 说明 |
-|------|------|
-| `/dst 默认房间 <房间ID>` | 设置默认房间 |
-| `/dst 查看默认` | 查看默认房间 |
-| `/dst 清除默认` | 清除默认房间设置 |
-
-### AI 功能
-
-| 命令 | 说明 |
-|------|------|
-| `/dst analyze <房间ID>` | AI 配置分析 |
-| `/dst mod recommend <房间ID> [类型]` | AI 模组推荐 |
-| `/dst mod parse <房间ID> <世界ID>` | AI 模组配置解析 |
-| `/dst archive analyze <文件>` | AI 存档分析 |
-| `/dst ask <问题>` | AI 智能问答 |
-
-AI 功能可选，需要配置 API Key 才能用。
-
-## 环境要求
-
-- Python 3.10+
-- NoneBot2 2.3.0+
-- DMP API 服务器
-
-## 常见问题
-
-**Q: 怎么获取 DMP API Token？**
-
-A: 登录 DMP 管理后台，在设置里找 API Token。
-
-**Q: AI 功能怎么用？**
-
-A: AI 功能是可选的。要使用的话在 `.env` 中配置：
-
-```bash
-AI_ENABLED=true
+AI_ENABLED=false
 AI_PROVIDER=openai
-AI_API_KEY=your_openai_key
+AI_API_KEY=
+AI_API_URL=https://api.openai.com/v1
 AI_MODEL=gpt-4
 ```
 
-**Q: 默认房间重启后还在吗？**
+安全建议：请妥善保管 `DST_API_TOKEN` 与 AI Key，并将管理员范围限制在必要的用户/群。
 
-A: 目前是内存存储，重启需要重新设置。
+## 使用示例
 
-**Q: 中文命令和英文命令有区别吗？**
+以下示例以默认命令前缀 `/` 为例 (具体以你的 NoneBot `command_start` 配置为准)：
 
-A: 没区别，功能完全一致。
+```bash
+/dst list
+/dst info 2
+/dst start 2
+/dst players 2
+/dst kick 2 KU_XXXX
 
-## 更新日志
+/dst mod search 健康条
+/dst mod list 2
+/dst mod add 2 1 123456789
+/dst backup create 2
+/dst archive download 2
+/dst console 2 c_announce("Hello")
 
-### v0.3.1 (2026-02-05)
+# 查看完整帮助
+/dst help
+```
 
-- 新增默认房间功能
-- 新增 24 个中文命令别名
-- AI 诊断模式增强
-- 测试覆盖率提升至 70%+
+说明：
 
-### v0.3.0 (2026-02-04)
+- 需要管理员权限的操作由 `DST_ADMIN_USERS` / `DST_ADMIN_GROUPS` 控制
+- 插件提供部分中文别名与模糊纠错输入，便于在聊天环境中快速调用
 
-- 新增 AI 智能命令
-- Lua 解析安全修复
-- 推荐结果验证
+## License
 
-## 许可证
+MIT
 
-MIT License
+## Links
 
-## 链接
-
-- GitHub: https://github.com/uitok/nonebot-dst-management
-- 问题反馈: https://github.com/uitok/nonebot-dst-management/issues
+- Repository: https://github.com/uitok/nonebot-dst-management
+- Issues: https://github.com/uitok/nonebot-dst-management/issues
