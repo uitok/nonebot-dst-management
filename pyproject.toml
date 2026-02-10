@@ -46,6 +46,7 @@ dependencies = [
     "loguru>=0.7.0",
     "pydantic>=2.0.0",
     "lupa>=2.0.0",
+    "arclet-alconna>=1.0.0",
 ]
 
 [project.optional-dependencies]
