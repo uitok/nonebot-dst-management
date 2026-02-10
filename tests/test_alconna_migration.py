@@ -1,11 +1,12 @@
 """
-Alconna 迁移测试脚本 — 第二阶段
+Alconna 迁移测试脚本 — 第三阶段 A
 
 测试 on_alconna 架构迁移的功能：
 - Alconna 库导入
 - 权限系统
 - on_alconna 匹配器 + Match 注入
 - 命令处理函数签名验证
+- 第三阶段 A 新增模块：help, config_ui, ai_analyze, ai_recommend, ai_mod_parse, backup
 """
 
 import importlib
@@ -54,6 +55,7 @@ def setup_common_mocks():
     mock_nonebot = MagicMock()
     mock_driver = MagicMock()
     mock_nonebot.get_driver = MagicMock(return_value=mock_driver)
+    mock_nonebot.get_bot = MagicMock(return_value=MagicMock())
 
     mock_matcher = MagicMock()
     mock_matcher.handle = MagicMock(return_value=lambda f: f)
@@ -87,7 +89,6 @@ def setup_common_mocks():
     sys.modules['nonebot.adapters.onebot.v11'] = mock_ob_message
 
     # ========== Mock nonebot_plugin_alconna ==========
-    # 创建真实的 Match 和 AlconnaMatch 类供测试检查
     from dataclasses import dataclass
 
     @dataclass
@@ -100,7 +101,6 @@ def setup_common_mocks():
         """模拟 AlconnaMatch 依赖注入"""
         return MockMatch()
 
-    # 创建一个真正返回 AlconnaMatcher 类的 on_alconna
     def mock_on_alconna(command, **kwargs):
         """模拟 on_alconna 匹配器工厂"""
         matcher_cls = MagicMock()
@@ -109,7 +109,6 @@ def setup_common_mocks():
         matcher_cls.finish = AsyncMock()
         matcher_cls.send = AsyncMock()
         matcher_cls.assign = MagicMock(return_value=lambda f: f)
-        # 保存 permission 参数供测试检查
         matcher_cls._on_alconna_kwargs = kwargs
         return matcher_cls
 
@@ -141,17 +140,31 @@ def setup_common_mocks():
     mock_db.get_user_default_room = AsyncMock(return_value=None)
     mock_db.set_user_last_room = AsyncMock()
     mock_db.get_user_ui_mode = AsyncMock(return_value=None)
+    mock_db.set_user_ui_mode = AsyncMock()
+    mock_db.init_db = AsyncMock()
     sys.modules['nonebot_plugin_dst_management.database'] = mock_db
 
-    # ========== Mock AI config ==========
+    # ========== Mock AI ==========
     from pydantic import BaseModel
     class AIConfigStub(BaseModel):
         enabled: bool = False
 
     mock_ai_config_module = types.ModuleType("nonebot_plugin_dst_management.ai.config")
     mock_ai_config_module.AIConfig = AIConfigStub
-    sys.modules['nonebot_plugin_dst_management.ai'] = MagicMock()
+
+    mock_ai = MagicMock()
+    sys.modules['nonebot_plugin_dst_management.ai'] = mock_ai
     sys.modules['nonebot_plugin_dst_management.ai.config'] = mock_ai_config_module
+
+    # Mock AI submodules used by new command files
+    mock_ai_client_module = MagicMock()
+    mock_ai_client_module.AIClient = MagicMock
+    sys.modules['nonebot_plugin_dst_management.ai.client'] = mock_ai_client_module
+
+    sys.modules['nonebot_plugin_dst_management.ai.analyzer'] = MagicMock()
+    sys.modules['nonebot_plugin_dst_management.ai.recommender'] = MagicMock()
+    sys.modules['nonebot_plugin_dst_management.ai.mod_parser'] = MagicMock()
+    sys.modules['nonebot_plugin_dst_management.ai.base'] = MagicMock()
 
     # ========== Mock config 模块 ==========
     config_mod = importlib.import_module("nonebot_plugin_dst_management.config")
@@ -244,7 +257,6 @@ def test_room_commands():
 
         print("✅ 房间命令模块加载成功")
 
-        # 验证 Alconna 命令定义
         for name, cmd_desc in [
             ("room_list_command", "查看房间列表"),
             ("room_info_command", "查看房间详情"),
@@ -256,21 +268,17 @@ def test_room_commands():
             print(f"   - {name}: {cmd.path} ({cmd.meta.description})")
             assert cmd.meta.description == cmd_desc, f"{name} 描述不匹配"
 
-        # 验证 on_alconna 匹配器存在
         for matcher_name in ["list_matcher", "info_matcher", "start_matcher", "stop_matcher", "restart_matcher"]:
             matcher = getattr(mod, matcher_name)
             assert matcher is not None, f"{matcher_name} 不存在"
         print("   - 所有 on_alconna 匹配器已验证 ✅")
 
-        # 验证匹配器权限配置
         assert mod.list_matcher._on_alconna_kwargs.get("permission") is not None
         assert mod.start_matcher._on_alconna_kwargs.get("permission") is not None
         print("   - 匹配器权限配置已验证 ✅")
 
-        # 验证 handler 函数签名使用 Match 注入
         sig = inspect.signature(mod.handle_room_list)
-        params = list(sig.parameters.values())
-        param_names = [p.name for p in params]
+        param_names = [p.name for p in sig.parameters.values()]
         assert "page" in param_names, "handle_room_list 应有 page 参数"
         print("   - handle_room_list 签名: Match[int] 注入 ✅")
 
@@ -279,7 +287,6 @@ def test_room_commands():
         assert "room_id" in param_names, "handle_room_info 应有 room_id 参数"
         print("   - handle_room_info 签名: Match[str] 注入 ✅")
 
-        # 测试 init
         mock_client = MagicMock()
         mod.init(mock_client)
         print("   - init() 初始化成功 ✅")
@@ -306,23 +313,19 @@ def test_console_commands():
 
         print("✅ 控制台命令模块加载成功")
 
-        # 验证命令定义
         assert mod.console_command.meta.description == "执行控制台命令"
         assert mod.announce_command.meta.description == "发送全服公告"
         print(f"   - console_command: {mod.console_command.path}")
         print(f"   - announce_command: {mod.announce_command.path}")
 
-        # 验证 on_alconna 匹配器
         assert mod.console_matcher is not None
         assert mod.announce_matcher is not None
         print("   - on_alconna 匹配器已验证 ✅")
 
-        # 验证 admin 权限配置
         assert mod.console_matcher._on_alconna_kwargs.get("permission") is not None
         assert mod.announce_matcher._on_alconna_kwargs.get("permission") is not None
         print("   - 匹配器权限配置 (ADMIN) ✅")
 
-        # 验证 handler 签名使用 Match 注入
         sig = inspect.signature(mod.handle_console)
         param_names = [p.name for p in sig.parameters.values()]
         assert "room_id" in param_names
@@ -333,7 +336,7 @@ def test_console_commands():
         param_names = [p.name for p in sig.parameters.values()]
         assert "room_id" in param_names
         assert "message" in param_names
-        print("   - handle_announce 签名: Match 注入 ���")
+        print("   - handle_announce 签名: Match 注入 ✅")
 
         mock_client = MagicMock()
         mod.init(mock_client)
@@ -361,23 +364,19 @@ def test_player_commands():
 
         print("✅ 玩家命令模块加载成功")
 
-        # 验证命令定义
         assert mod.players_command.meta.description == "查看在线玩家"
         assert mod.kick_command.meta.description == "踢出玩家"
         print(f"   - players_command: {mod.players_command.path}")
         print(f"   - kick_command: {mod.kick_command.path}")
 
-        # 验证 on_alconna 匹配器
         assert mod.players_matcher is not None
         assert mod.kick_matcher is not None
         print("   - on_alconna 匹配器已验证 ✅")
 
-        # 验证权限配置
         assert mod.players_matcher._on_alconna_kwargs.get("permission") is not None
         assert mod.kick_matcher._on_alconna_kwargs.get("permission") is not None
         print("   - 匹配器权限配置 (USER/ADMIN) ✅")
 
-        # 验证 handler 签名使用 Match 注入
         sig = inspect.signature(mod.handle_players)
         param_names = [p.name for p in sig.parameters.values()]
         assert "room_id" in param_names
@@ -401,6 +400,273 @@ def test_player_commands():
         return False
 
 
+def test_help_command():
+    """测试帮助命令 (on_alconna 架构)"""
+    print("\n" + "=" * 60)
+    print("📖 测试帮助命令 (on_alconna)")
+    print("=" * 60)
+
+    try:
+        setup_common_mocks()
+
+        mod = importlib.import_module("nonebot_plugin_dst_management.commands.help")
+        importlib.reload(mod)
+
+        print("✅ 帮助命令模块加载成功")
+
+        assert mod.help_command.meta.description == "查看帮助"
+        print(f"   - help_command: {mod.help_command.path} ({mod.help_command.meta.description})")
+
+        assert mod.help_matcher is not None
+        print("   - on_alconna 匹配器已验证 ✅")
+
+        assert mod.help_matcher._on_alconna_kwargs.get("permission") is not None
+        print("   - 匹配器权限配置 (USER) ✅")
+
+        sig = inspect.signature(mod.handle_help)
+        param_names = [p.name for p in sig.parameters.values()]
+        assert "category" in param_names, "handle_help 应有 category 参数"
+        print("   - handle_help 签名: Match[str] 注入 ✅")
+
+        mod.init()
+        print("   - init() 初始化成功 ✅")
+
+        return True
+    except Exception as e:
+        print(f"❌ 帮助命令测试失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def test_config_ui_command():
+    """测试 UI 配置命令 (on_alconna 架构)"""
+    print("\n" + "=" * 60)
+    print("⚙️ 测试 UI 配置命令 (on_alconna)")
+    print("=" * 60)
+
+    try:
+        setup_common_mocks()
+
+        mod = importlib.import_module("nonebot_plugin_dst_management.commands.config_ui")
+        importlib.reload(mod)
+
+        print("✅ UI 配置命令模块加载成功")
+
+        assert mod.config_ui_command.meta.description == "设置UI展示模式"
+        print(f"   - config_ui_command: {mod.config_ui_command.path} ({mod.config_ui_command.meta.description})")
+
+        assert mod.config_ui_matcher is not None
+        print("   - on_alconna 匹配器已验证 ✅")
+
+        assert mod.config_ui_matcher._on_alconna_kwargs.get("permission") is not None
+        print("   - 匹配器权限配置 (USER) ✅")
+
+        sig = inspect.signature(mod.handle_config_ui)
+        param_names = [p.name for p in sig.parameters.values()]
+        assert "mode" in param_names, "handle_config_ui 应有 mode 参数"
+        print("   - handle_config_ui 签名: Match[str] 注入 ✅")
+
+        mod.init()
+        print("   - init() 初始化成功 ✅")
+
+        return True
+    except Exception as e:
+        print(f"❌ UI 配置命令测试失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def test_ai_analyze_command():
+    """测试 AI 配置分析命令 (on_alconna 架构)"""
+    print("\n" + "=" * 60)
+    print("🤖 测试 AI 配置分析命令 (on_alconna)")
+    print("=" * 60)
+
+    try:
+        setup_common_mocks()
+
+        mod = importlib.import_module("nonebot_plugin_dst_management.commands.ai_analyze")
+        importlib.reload(mod)
+
+        print("✅ AI 分析命令模块加载成功")
+
+        assert mod.analyze_command.meta.description == "AI配置分析"
+        print(f"   - analyze_command: {mod.analyze_command.path} ({mod.analyze_command.meta.description})")
+
+        assert mod.analyze_matcher is not None
+        print("   - on_alconna 匹配器已验证 ✅")
+
+        assert mod.analyze_matcher._on_alconna_kwargs.get("permission") is not None
+        print("   - 匹配器权限配置 (USER) ✅")
+
+        sig = inspect.signature(mod.handle_analyze)
+        param_names = [p.name for p in sig.parameters.values()]
+        assert "room_id" in param_names, "handle_analyze 应有 room_id 参数"
+        print("   - handle_analyze 签名: Match[str] 注入 ✅")
+
+        mock_api = MagicMock()
+        mock_ai = MagicMock()
+        mod.init(mock_api, mock_ai)
+        assert mod._api_client is mock_api
+        assert mod._ai_client is mock_ai
+        print("   - init(api_client, ai_client) 初始化成功 ✅")
+
+        return True
+    except Exception as e:
+        print(f"❌ AI 分析命令测试失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def test_ai_recommend_command():
+    """测试 AI 模组推荐命令 (on_alconna 架构)"""
+    print("\n" + "=" * 60)
+    print("🧩 测试 AI 模组推荐命令 (on_alconna)")
+    print("=" * 60)
+
+    try:
+        setup_common_mocks()
+
+        mod = importlib.import_module("nonebot_plugin_dst_management.commands.ai_recommend")
+        importlib.reload(mod)
+
+        print("✅ AI 推荐命令模块加载成功")
+
+        assert mod.recommend_command.meta.description == "AI模组推荐"
+        print(f"   - recommend_command: {mod.recommend_command.path} ({mod.recommend_command.meta.description})")
+
+        assert mod.recommend_matcher is not None
+        print("   - on_alconna 匹配器已验证 ✅")
+
+        sig = inspect.signature(mod.handle_recommend)
+        param_names = [p.name for p in sig.parameters.values()]
+        assert "room_id" in param_names
+        assert "mod_type" in param_names
+        print("   - handle_recommend 签名: Match[str] 注入 ✅")
+
+        mock_api = MagicMock()
+        mock_ai = MagicMock()
+        mod.init(mock_api, mock_ai)
+        assert mod._api_client is mock_api
+        assert mod._ai_client is mock_ai
+        print("   - init(api_client, ai_client) 初始化成功 ✅")
+
+        return True
+    except Exception as e:
+        print(f"❌ AI 推荐命令测试失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def test_ai_mod_parse_command():
+    """测试 AI 模组配置解析命令 (on_alconna 架构)"""
+    print("\n" + "=" * 60)
+    print("🔍 测试 AI 模组配置解析命令 (on_alconna)")
+    print("=" * 60)
+
+    try:
+        setup_common_mocks()
+
+        mod = importlib.import_module("nonebot_plugin_dst_management.commands.ai_mod_parse")
+        importlib.reload(mod)
+
+        print("✅ AI 解析命令模块加载成功")
+
+        assert mod.mod_parse_command.meta.description == "AI模组配置解析"
+        print(f"   - mod_parse_command: {mod.mod_parse_command.path} ({mod.mod_parse_command.meta.description})")
+
+        assert mod.mod_parse_matcher is not None
+        print("   - on_alconna 匹配器已验证 ✅")
+
+        sig = inspect.signature(mod.handle_mod_parse)
+        param_names = [p.name for p in sig.parameters.values()]
+        assert "room_id" in param_names
+        assert "world_id" in param_names
+        print("   - handle_mod_parse 签名: Match[str] 注入 ✅")
+
+        mock_api = MagicMock()
+        mock_ai = MagicMock()
+        mod.init(mock_api, mock_ai)
+        assert mod._api_client is mock_api
+        assert mod._ai_client is mock_ai
+        print("   - init(api_client, ai_client) 初始化成功 ✅")
+
+        return True
+    except Exception as e:
+        print(f"❌ AI 解析命令测试失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def test_backup_commands():
+    """测试备份管理命令 (on_alconna 架构)"""
+    print("\n" + "=" * 60)
+    print("💾 测试备份管理命令 (on_alconna)")
+    print("=" * 60)
+
+    try:
+        setup_common_mocks()
+
+        mod = importlib.import_module("nonebot_plugin_dst_management.commands.backup")
+        importlib.reload(mod)
+
+        print("✅ 备份命令模块加载成功")
+
+        for name, cmd_desc in [
+            ("backup_list_command", "查看备份列表"),
+            ("backup_create_command", "创建备份"),
+            ("backup_restore_command", "恢复备份"),
+        ]:
+            cmd = getattr(mod, name)
+            print(f"   - {name}: {cmd.path} ({cmd.meta.description})")
+            assert cmd.meta.description == cmd_desc, f"{name} 描述不匹配"
+
+        for matcher_name in ["backup_list_matcher", "backup_create_matcher", "backup_restore_matcher"]:
+            matcher = getattr(mod, matcher_name)
+            assert matcher is not None, f"{matcher_name} 不存在"
+        print("   - 所有 on_alconna 匹配器已验证 ✅")
+
+        # 验证权限配置
+        assert mod.backup_list_matcher._on_alconna_kwargs.get("permission") is not None
+        assert mod.backup_create_matcher._on_alconna_kwargs.get("permission") is not None
+        assert mod.backup_restore_matcher._on_alconna_kwargs.get("permission") is not None
+        print("   - 匹配器权限配置 (USER/ADMIN) ✅")
+
+        # 验证 handler 签名
+        sig = inspect.signature(mod.handle_backup_list)
+        param_names = [p.name for p in sig.parameters.values()]
+        assert "room_id" in param_names
+        print("   - handle_backup_list 签名: Match[str] 注入 ✅")
+
+        sig = inspect.signature(mod.handle_backup_create)
+        param_names = [p.name for p in sig.parameters.values()]
+        assert "room_id" in param_names
+        print("   - handle_backup_create 签名: Match[str] 注入 ✅")
+
+        sig = inspect.signature(mod.handle_backup_restore)
+        param_names = [p.name for p in sig.parameters.values()]
+        assert "room_id_or_file" in param_names
+        assert "filename" in param_names
+        print("   - handle_backup_restore 签名: Match[str] 注入 ✅")
+
+        mock_client = MagicMock()
+        mod.init(mock_client)
+        assert mod._api_client is mock_client
+        print("   - init(api_client) 初始化成功 ✅")
+
+        return True
+    except Exception as e:
+        print(f"❌ 备份命令测试失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def test_handlers_init():
     """测试统一初始化入口"""
     print("\n" + "=" * 60)
@@ -415,20 +681,30 @@ def test_handlers_init():
 
         print("✅ handlers 模块加载成功")
 
-        # 验证 init 函数存在且可调用
         assert callable(mod.init), "init 应为可调用对象"
 
-        # 调用 init 初始化所有模块
         mock_client = MagicMock()
-        mod.init(mock_client)
-        print("   - init(api_client) 初始化成功 ✅")
+        mock_ai_client = MagicMock()
+        mod.init(mock_client, mock_ai_client)
+        print("   - init(api_client, ai_client) 初始化成功 ✅")
 
-        # 验证各子模块的 API 客户端已设置
-        from nonebot_plugin_dst_management.commands import room, console, player
+        # 验证核心子模块的 API 客户端已设置
+        from nonebot_plugin_dst_management.commands import room, console, player, backup
         assert room._api_client is mock_client, "room 模块 API 客户端未设置"
         assert console._api_client is mock_client, "console 模块 API 客户端未设置"
         assert player._api_client is mock_client, "player 模块 API 客户端未设置"
-        print("   - 所有子模块 API 客户端已设置 ✅")
+        assert backup._api_client is mock_client, "backup 模块 API 客户端未设置"
+        print("   - 核心子模块 API 客户端已设置 ✅")
+
+        # 验证 AI 子模块客户端已设置
+        from nonebot_plugin_dst_management.commands import ai_analyze, ai_recommend, ai_mod_parse
+        assert ai_analyze._api_client is mock_client
+        assert ai_analyze._ai_client is mock_ai_client
+        assert ai_recommend._api_client is mock_client
+        assert ai_recommend._ai_client is mock_ai_client
+        assert ai_mod_parse._api_client is mock_client
+        assert ai_mod_parse._ai_client is mock_ai_client
+        print("   - AI 子模块客户端已设置 ✅")
 
         return True
     except Exception as e:
@@ -447,11 +723,19 @@ def test_no_on_command_usage():
     try:
         setup_common_mocks()
 
-        for mod_name in [
+        all_modules = [
             "nonebot_plugin_dst_management.commands.room",
             "nonebot_plugin_dst_management.commands.console",
             "nonebot_plugin_dst_management.commands.player",
-        ]:
+            "nonebot_plugin_dst_management.commands.help",
+            "nonebot_plugin_dst_management.commands.config_ui",
+            "nonebot_plugin_dst_management.commands.ai_analyze",
+            "nonebot_plugin_dst_management.commands.ai_recommend",
+            "nonebot_plugin_dst_management.commands.ai_mod_parse",
+            "nonebot_plugin_dst_management.commands.backup",
+        ]
+
+        for mod_name in all_modules:
             mod = importlib.import_module(mod_name)
             importlib.reload(mod)
             source = inspect.getsource(mod)
@@ -476,22 +760,80 @@ def test_no_on_command_usage():
         return False
 
 
+def test_old_handlers_removed():
+    """验证已迁移的旧 handler 文件已删除"""
+    print("\n" + "=" * 60)
+    print("🗑️ 验证已删除旧 handler 文件")
+    print("=" * 60)
+
+    try:
+        handlers_dir = project_root / "nonebot_plugin_dst_management" / "handlers"
+        removed_files = [
+            "room.py",
+            "console.py",
+            "player.py",
+            "player_enhanced.py",
+            "help.py",
+            "config_ui.py",
+            "ai_analyze.py",
+            "ai_recommend.py",
+            "ai_mod_parse.py",
+            "backup.py",
+        ]
+
+        for fname in removed_files:
+            fpath = handlers_dir / fname
+            assert not fpath.exists(), f"旧文件未删除: handlers/{fname}"
+            print(f"   - handlers/{fname}: 已删除 ✅")
+
+        # 验证仍存在的旧 handler 文件
+        remaining_files = [
+            "mod.py",
+            "archive.py",
+            "ai_mod_apply.py",
+            "ai_archive.py",
+            "ai_qa.py",
+            "sign.py",
+            "default_room.py",
+            "auto_discovery.py",
+        ]
+
+        for fname in remaining_files:
+            fpath = handlers_dir / fname
+            assert fpath.exists(), f"不应删除的文件丢失: handlers/{fname}"
+        print(f"   - 保留 {len(remaining_files)} 个待迁移 handler 文件 ✅")
+
+        return True
+    except Exception as e:
+        print(f"❌ 旧 handler 文件检查失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def main():
     """主测试函数"""
     print("""
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║
-║        Alconna 迁移测试 - 第二阶段                       ║
-║        (on_alconna 架构升级)                             ║
+║        Alconna 迁移测试 - 第三阶段 A                    ║
+║        (on_alconna 架构 + 6 模块迁移)                   ║
 ║                                                          ║
 ║  测试内容：                                              ║
-║  1. Alconna 库导入                                       ║
-║  2. 权限系统                                             ║
-║  3. 房间管理命令 (on_alconna + Match 注入)               ║
-║  4. 控制台命令 (on_alconna + Match 注入)                 ║
-║  5. 玩家管理命令 (on_alconna + Match 注入)               ║
-║  6. 统一初始化入口                                       ║
-║  7. 验证 on_command 已移除                               ║
+║  1.  Alconna 库导入                                      ║
+║  2.  权限系统                                            ║
+║  3.  房间管理命令                                        ║
+║  4.  控制台命令                                          ║
+║  5.  玩家管理命令                                        ║
+║  6.  帮助命令 [NEW]                                      ║
+║  7.  UI 配置命令 [NEW]                                   ║
+║  8.  AI 配置分析命令 [NEW]                               ║
+║  9.  AI 模组推荐命令 [NEW]                               ║
+║  10. AI 模组配置解析命令 [NEW]                           ║
+║  11. 备份管理命令 [NEW]                                  ║
+║  12. 统一初始化入口 (含 AI)                              ║
+║  13. 验证 on_command 已移除                              ║
+║  14. 验证旧 handler 文件已删除 [NEW]                     ║
 ║                                                          ║
 ╚══════════════════════════════════════════════════════════╝
     """)
@@ -503,8 +845,15 @@ def main():
     results.append(("房间管理命令 (on_alconna)", test_room_commands()))
     results.append(("控制台命令 (on_alconna)", test_console_commands()))
     results.append(("玩家管理命令 (on_alconna)", test_player_commands()))
+    results.append(("帮助命令 (on_alconna)", test_help_command()))
+    results.append(("UI 配置命令 (on_alconna)", test_config_ui_command()))
+    results.append(("AI 配置分析命令", test_ai_analyze_command()))
+    results.append(("AI 模组推荐命令", test_ai_recommend_command()))
+    results.append(("AI 模组解析命令", test_ai_mod_parse_command()))
+    results.append(("备份管理命令 (on_alconna)", test_backup_commands()))
     results.append(("统一初始化入口", test_handlers_init()))
     results.append(("on_command 已移除", test_no_on_command_usage()))
+    results.append(("旧 handler 文件已删除", test_old_handlers_removed()))
 
     print("\n" + "=" * 60)
     print("📊 测试结果汇总")
@@ -517,10 +866,10 @@ def main():
         status = "✅ 通过" if result else "❌ 失败"
         print(f"   {name}: {status}")
 
-    print(f"\n总计: {passed}/{total} 项测试通过")
+    print(f"\n总计: {passed}/{total} 项测试���过")
 
     if passed == total:
-        print("\n🎉 所有测试通过！第二阶段 on_alconna 架构升级成功完成！")
+        print("\n🎉 所有测试通过！第三阶段 A 迁移成功完成！")
         return 0
     else:
         print(f"\n⚠️  {total - passed} 项测试失败，请检查相关模块")

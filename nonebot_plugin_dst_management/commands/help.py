@@ -1,15 +1,11 @@
 """\
-Help command (Phase A UI)
+Help command (on_alconna)
 
 Hierarchical help menu with 4 categories:
 - 🏠 基础管理
 - 👥 玩家管理
 - 📦 备份与模组
 - ⚙️ 系统设置
-
-Supports:
-- /dst help
-- /dst help <模块名>
 
 Keep this file UI-only (no API calls).
 """
@@ -19,11 +15,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable, Optional
 
-from nonebot import on_command
-from nonebot.adapters.onebot.v11 import Message, MessageEvent
-from nonebot.params import CommandArg
+from arclet.alconna import Alconna, Args, CommandMeta
+from nonebot.internal.adapter import Event
+
+from nonebot_plugin_alconna import Match, AlconnaMatch, on_alconna
 
 from ..helpers.formatters import ICON_TIP, detect_bot_family, format_info
+from ..utils.permission import USER_PERMISSION
 
 
 @dataclass(frozen=True)
@@ -96,7 +94,7 @@ def _resolve_category(raw: str) -> Optional[str]:
     return None
 
 
-def _help_main_menu() -> Message:
+def _help_main_menu() -> str:
     lines: list[str] = [
         "📖 DST 管理帮助",
         "",
@@ -131,11 +129,10 @@ def _help_main_menu() -> Message:
         "",
         f"{ICON_TIP} 发送 /dst help 基础 | 玩家 | 备份 | 设置 查看完整用法",
     ]
-    return Message("\n".join(lines).strip())
+    return "\n".join(lines).strip()
 
 
-def _help_main_menu_markdown() -> Message:
-    # Keep it simple and predictable for QQ markdown rendering.
+def _help_main_menu_markdown() -> str:
     lines: list[str] = [
         "# DST 管理帮助",
         "",
@@ -153,15 +150,16 @@ def _help_main_menu_markdown() -> Message:
         "- 🧩 模组: `/dst mod search|list|add|remove|check` (🔒)",
         "",
         "## ⚙️ 系统设置",
-        "- 📌 默认房间: `/dst 默认房间` / `/dst 查看默认` / `/dst 清除默认`",
+        "- 📌 默认房间: `/dst 默认房间` / `/dst 查看默认` / `/dst ���除默认`",
         "- 🔍 自动发现: `/dst room scan` (🔒)",
         "- 📥 导入发现: `/dst room import ...` (🔒)",
         "",
         f"{ICON_TIP} 发送 `/dst help 基础|玩家|备份|设置` 查看完整用法",
     ]
-    return Message("\n".join(lines).strip())
+    return "\n".join(lines).strip()
 
-def _help_base() -> Message:
+
+def _help_base() -> str:
     items = [
         HelpItem(
             "📋",
@@ -206,10 +204,10 @@ def _help_base() -> Message:
     lines.extend(_render_items(items))
     lines.append("")
     lines.append("🔒 标记的命令需要管理员权限")
-    return Message("\n".join(lines).strip())
+    return "\n".join(lines).strip()
 
 
-def _help_player() -> Message:
+def _help_player() -> str:
     items = [
         HelpItem(
             "👥",
@@ -222,7 +220,7 @@ def _help_player() -> Message:
             "🦶",
             "踢出玩家",
             "/dst kick <房间ID> <KU_ID>",
-            "踢出指定玩家",
+            "踢出���定玩家",
             admin_only=True,
             aliases=("dst 踢出玩家", "dst 踢人", "dst 踢出", "dst 踢玩家"),
         ),
@@ -231,10 +229,10 @@ def _help_player() -> Message:
     lines.extend(_render_items(items))
     lines.append("")
     lines.append("🔒 标记的命令需要管理员权限")
-    return Message("\n".join(lines).strip())
+    return "\n".join(lines).strip()
 
 
-def _help_backup_mod() -> Message:
+def _help_backup_mod() -> str:
     items = [
         HelpItem(
             "💾",
@@ -301,10 +299,10 @@ def _help_backup_mod() -> Message:
     lines.extend(_render_items(items))
     lines.append("")
     lines.append("🔒 标记的命令需要管理员权限")
-    return Message("\n".join(lines).strip())
+    return "\n".join(lines).strip()
 
 
-def _help_settings() -> Message:
+def _help_settings() -> str:
     items = [
         HelpItem(
             "📌",
@@ -346,60 +344,76 @@ def _help_settings() -> Message:
     ]
     lines = ["⚙️ 系统设置", ""]
     lines.extend(_render_items(items))
-    return Message("\n".join(lines).strip())
+    return "\n".join(lines).strip()
 
 
-def init() -> None:
-    """Register help command matcher."""
+# ========== Alconna 命令定义 ==========
 
-    help_cmd = on_command(
-        "dst help",
-        aliases={"dst 帮助", "dst 菜单", "dst 帮助菜单", "dst 指令", "dst 指令菜单", "dst 命令"},
-        priority=5,
-        block=True,
-    )
+help_command = Alconna(
+    "dst help",
+    Args["category", str, None],
+    meta=CommandMeta(
+        description="查看帮助",
+        usage="/dst help [模块名]",
+        example="/dst help 基础",
+    ),
+)
 
-    @help_cmd.handle()
-    async def handle_help(bot: Any, event: MessageEvent, args: Message = CommandArg()):
-        # NOTE: `args` can be a NoneBot Param in tests when called directly.
-        raw = ""
-        if hasattr(args, "extract_plain_text"):
-            try:
-                extracted = args.extract_plain_text()
-                if isinstance(extracted, str):
-                    raw = extracted.strip()
-            except Exception:
-                raw = ""
+help_matcher = on_alconna(help_command, permission=USER_PERMISSION, priority=5, block=True)
 
-        family = detect_bot_family(bot, event)
 
-        if not raw:
-            await help_cmd.finish(
-                _help_main_menu_markdown() if family == "qq" else _help_main_menu()
-            )
-            return
+# ========== 命令处理 ==========
 
-        category = _resolve_category(raw)
-        if category == "base":
-            await help_cmd.finish(_help_base())
-            return
-        if category == "player":
-            await help_cmd.finish(_help_player())
-            return
-        if category == "backup_mod":
-            await help_cmd.finish(_help_backup_mod())
-            return
-        if category == "settings":
-            await help_cmd.finish(_help_settings())
-            return
+@help_matcher.handle()
+async def handle_help(
+    event: Event,
+    category: Match[str] = AlconnaMatch("category"),
+) -> None:
+    """处理帮助命令"""
+    # Detect bot family for markdown vs text rendering
+    bot = None
+    try:
+        from nonebot import get_bot
+        bot = get_bot()
+    except Exception:
+        pass
 
-        await help_cmd.finish(
+    family = detect_bot_family(bot, event) if bot else "unknown"
+
+    cat_val = category.result if category.available else None
+
+    if not cat_val:
+        if family == "qq":
+            await help_matcher.finish(_help_main_menu_markdown())
+        else:
+            await help_matcher.finish(_help_main_menu())
+        return
+
+    resolved = _resolve_category(cat_val)
+    if resolved == "base":
+        await help_matcher.finish(_help_base())
+    elif resolved == "player":
+        await help_matcher.finish(_help_player())
+    elif resolved == "backup_mod":
+        await help_matcher.finish(_help_backup_mod())
+    elif resolved == "settings":
+        await help_matcher.finish(_help_settings())
+    else:
+        await help_matcher.finish(
             format_info(
-                f"未找到模块：{raw}\n{ICON_TIP} 可用：基础 / 玩家 / 备份 / 设置（或 base/player/backup/settings）"
+                f"未找到模块：{cat_val}\n{ICON_TIP} 可用：基础 / 玩家 / 备份 / 设置（或 base/player/backup/settings）"
             )
         )
 
-    return None
+
+def init() -> None:
+    """No-op init for compatibility. Matcher is registered at import time."""
+    pass
 
 
-__all__ = ["init"]
+__all__ = [
+    "help_command",
+    "help_matcher",
+    "handle_help",
+    "init",
+]

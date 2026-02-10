@@ -162,26 +162,20 @@ async def init_client():
     _ai_client = AIClient(config.get_ai_config())
 
     # ========== Alconna 命令 (on_alconna 架构) ==========
-    # 核心命令已迁移至 commands/ 模块，使用 on_alconna 匹配器。
-    # 匹配器在模块导入时自动注册，init() 仅设置 API 客户端。
+    # 已迁移至 commands/ 模块：room, console, player, help, config_ui,
+    # backup, ai_analyze, ai_recommend, ai_mod_parse
     from .commands import handlers as alconna_handlers
-    alconna_handlers.init(_api_client)
+    alconna_handlers.init(_api_client, _ai_client)
 
     # ========== 旧版命令处理器 (尚未迁移) ==========
     from .handlers import (
-        backup,
         mod,
         archive,
-        ai_analyze,
-        ai_recommend,
-        ai_mod_parse,
         ai_mod_apply,
         ai_archive,
         ai_qa,
         default_room,
         sign,
-        help,
-        config_ui,
         auto_discovery,
     )
 
@@ -190,20 +184,14 @@ async def init_client():
 
     sign_monitor.init_sign_monitor(_api_client)
 
-    # 旧版命令初始化（room, player, console 已迁移至 on_alconna）
-    backup.init(_api_client)
+    # 旧版命令初始化
     mod.init(_api_client, _ai_client)
     archive.init(_api_client)
-    ai_analyze.init(_api_client, _ai_client)
-    ai_recommend.init(_api_client, _ai_client)
-    ai_mod_parse.init(_api_client, _ai_client)
     ai_mod_apply.init(_api_client, _ai_client)
     ai_archive.init(_api_client)
     ai_qa.init(_api_client)
     default_room.init(_api_client, _ai_client)
     sign.init(_api_client)
-    help.init()
-    config_ui.init()
     auto_discovery.init()
 
 
