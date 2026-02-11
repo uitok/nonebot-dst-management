@@ -160,6 +160,8 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "--showlocals",
+    "--cov=nonebot_plugin_dst_management",
+    "--cov-report=term-missing",
 ]
 markers = [
     "slow: marks tests as slow",

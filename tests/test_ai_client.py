@@ -324,3 +324,409 @@ async def test_ai_client_cache_expired(monkeypatch: pytest.MonkeyPatch) -> None:
     assert ai_client._get_cached_response(key) is None
     assert key not in ai_client._cache
     await ai_client.close()
+
+
+# ---- Supplemental tests to fill coverage gaps ----
+
+
+@pytest.mark.asyncio
+async def test_openai_chat_with_system_prompt() -> None:
+    """Covers line 53: system_prompt appended to api_messages in OpenAI chat."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        assert payload["messages"][0] == {"role": "system", "content": "you are helpful"}
+        return httpx.Response(200, json={"choices": [{"message": {"content": "hi"}}]})
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    config = AIConfig(enabled=True, api_key="key")
+    provider = OpenAIProvider(config, http_client=http_client)
+
+    result = await provider.chat(
+        [{"role": "user", "content": "hello"}], system_prompt="you are helpful"
+    )
+    assert result == "hi"
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_openai_stream_missing_api_key() -> None:
+    """Covers line 81: OpenAI stream_chat raises AIAuthError when api_key is empty."""
+    config = AIConfig(enabled=True, api_key="")
+    provider = OpenAIProvider(config)
+
+    with pytest.raises(AIAuthError):
+        async for _ in provider.stream_chat([{"role": "user", "content": "hello"}]):
+            pass
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_openai_stream_empty_data_line() -> None:
+    """Covers line 106: empty data after 'data:' prefix is skipped."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        content = "\n".join([
+            "data: ",
+            "data: " + json.dumps({"choices": [{"delta": {"content": "ok"}}]}),
+            "data: [DONE]",
+            "",
+        ])
+        return httpx.Response(200, content=content.encode("utf-8"))
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    config = AIConfig(enabled=True, api_key="key")
+    provider = OpenAIProvider(config, http_client=http_client)
+
+    parts: list[str] = []
+    async for chunk in provider.stream_chat([{"role": "user", "content": "hello"}]):
+        parts.append(chunk)
+    assert parts == ["ok"]
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_claude_missing_api_key_chat() -> None:
+    """Covers line 135: Claude chat raises AIAuthError when api_key is empty."""
+    config = AIConfig(enabled=True, provider="claude", api_key="")
+    provider = ClaudeProvider(config)
+
+    with pytest.raises(AIAuthError):
+        await provider.chat([{"role": "user", "content": "hello"}])
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_claude_chat_parse_error() -> None:
+    """Covers lines 166-167: Claude chat response parse error."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"unexpected": "format"})
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    config = AIConfig(enabled=True, provider="claude", api_key="key")
+    provider = ClaudeProvider(config, http_client=http_client)
+
+    with pytest.raises(AIResponseParseError):
+        await provider.chat([{"role": "user", "content": "hello"}])
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_claude_stream_missing_api_key() -> None:
+    """Covers line 176: Claude stream_chat raises AIAuthError when api_key is empty."""
+    config = AIConfig(enabled=True, provider="claude", api_key="")
+    provider = ClaudeProvider(config)
+
+    with pytest.raises(AIAuthError):
+        async for _ in provider.stream_chat([{"role": "user", "content": "hello"}]):
+            pass
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_claude_stream_no_system_prompt() -> None:
+    """Covers line 188+: Claude stream_chat without system_prompt (no 'system' key in payload)."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        assert "system" not in payload
+        content = "\n".join([
+            "data: " + json.dumps({"type": "content_block_delta", "delta": {"text": "hi"}}),
+            "data: " + json.dumps({"type": "message_stop"}),
+            "",
+        ])
+        return httpx.Response(200, content=content.encode("utf-8"))
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    config = AIConfig(enabled=True, provider="claude", api_key="key")
+    provider = ClaudeProvider(config, http_client=http_client)
+
+    parts: list[str] = []
+    async for chunk in provider.stream_chat([{"role": "user", "content": "hello"}]):
+        parts.append(chunk)
+    assert parts == ["hi"]
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_claude_stream_parse_error() -> None:
+    """Covers lines 225-226: Claude stream_chat parse error."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        content = "\n".join(["data: {invalid json}", ""])
+        return httpx.Response(200, content=content.encode("utf-8"))
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    config = AIConfig(enabled=True, provider="claude", api_key="key")
+    provider = ClaudeProvider(config, http_client=http_client)
+
+    with pytest.raises(AIResponseParseError):
+        async for _ in provider.stream_chat([{"role": "user", "content": "hello"}]):
+            pass
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_claude_stream_empty_data_lines() -> None:
+    """Covers lines 207, 210: empty data lines and non-data lines skipped."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        content = "\n".join([
+            "event: ping",
+            "data: ",
+            "data: " + json.dumps({"type": "content_block_delta", "delta": {"text": "ok"}}),
+            "data: " + json.dumps({"type": "message_stop"}),
+            "",
+        ])
+        return httpx.Response(200, content=content.encode("utf-8"))
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    config = AIConfig(enabled=True, provider="claude", api_key="key")
+    provider = ClaudeProvider(config, http_client=http_client)
+
+    parts: list[str] = []
+    async for chunk in provider.stream_chat([{"role": "user", "content": "hello"}]):
+        parts.append(chunk)
+    assert parts == ["ok"]
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_ollama_chat_parse_error() -> None:
+    """Covers lines 263-264: Ollama chat response parse error."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"unexpected": "format"})
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    config = AIConfig(enabled=True, provider="ollama")
+    provider = OllamaProvider(config, http_client=http_client)
+
+    with pytest.raises(AIResponseParseError):
+        await provider.chat([{"role": "user", "content": "hello"}])
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_ollama_stream_parse_error() -> None:
+    """Covers lines 291-292: Ollama stream_chat parse error."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        content = "\n".join(["{invalid json}", ""])
+        return httpx.Response(200, content=content.encode("utf-8"))
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    config = AIConfig(enabled=True, provider="ollama")
+    provider = OllamaProvider(config, http_client=http_client)
+
+    with pytest.raises(AIResponseParseError):
+        async for _ in provider.stream_chat([{"role": "user", "content": "hello"}]):
+            pass
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_mock_provider_with_error() -> None:
+    """Covers lines 325, 334-337: MockProvider raises error in chat and stream_chat."""
+    config = AIConfig(enabled=True, provider="mock")
+    error = AIProviderError("boom")
+    provider = MockProvider(config, error=error)
+
+    with pytest.raises(AIProviderError, match="boom"):
+        await provider.chat([{"role": "user", "content": "hello"}])
+
+    with pytest.raises(AIProviderError, match="boom"):
+        async for _ in provider.stream_chat([{"role": "user", "content": "hello"}]):
+            pass
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_mock_provider_stream_empty_response() -> None:
+    """Covers MockProvider stream_chat with empty response."""
+    config = AIConfig(enabled=True, provider="mock")
+    provider = MockProvider(config, response="")
+
+    parts: list[str] = []
+    async for chunk in provider.stream_chat([{"role": "user", "content": "hello"}]):
+        parts.append(chunk)
+    assert parts == []
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_ai_client_stream_disabled() -> None:
+    """Covers line 399: stream_chat raises AIProviderError when AI is disabled."""
+    config = AIConfig(enabled=False, provider="mock")
+    ai_client = AIClient(config, provider=MockProvider(config, response="x"))
+
+    with pytest.raises(AIProviderError):
+        async for _ in ai_client.stream_chat([{"role": "user", "content": "hello"}]):
+            pass
+    await ai_client.close()
+
+
+@pytest.mark.asyncio
+async def test_ai_client_stream_empty_messages() -> None:
+    """Covers line 401: stream_chat raises ValueError on empty messages."""
+    config = AIConfig(enabled=True, provider="mock")
+    ai_client = AIClient(config, provider=MockProvider(config, response="x"))
+
+    with pytest.raises(ValueError):
+        async for _ in ai_client.stream_chat([]):
+            pass
+    await ai_client.close()
+
+
+@pytest.mark.asyncio
+async def test_create_provider_all_types() -> None:
+    """Covers lines 438-446: _create_provider for openai, claude, ollama, mock, and unsupported."""
+    for prov_name, prov_cls in [
+        ("openai", OpenAIProvider),
+        ("claude", ClaudeProvider),
+        ("ollama", OllamaProvider),
+        ("mock", MockProvider),
+    ]:
+        config = AIConfig(enabled=True, provider=prov_name)
+        ai_client = AIClient(config)
+        assert isinstance(ai_client.provider, prov_cls)
+        await ai_client.close()
+
+
+@pytest.mark.asyncio
+async def test_cache_disabled_ttl_zero() -> None:
+    """Covers lines 469, 483: cache is not used when cache_ttl is 0."""
+    config = AIConfig(enabled=True, provider="mock", cache_ttl=0)
+    provider = MockProvider(config, response="fresh")
+    ai_client = AIClient(config, provider=provider)
+
+    result = await ai_client.chat([{"role": "user", "content": "hello"}])
+    assert result == "fresh"
+    assert len(ai_client._cache) == 0
+
+    key = ai_client._make_cache_key([{"role": "user", "content": "hello"}], "", {})
+    assert ai_client._get_cached_response(key) is None
+    await ai_client.close()
+
+
+@pytest.mark.asyncio
+async def test_ollama_chat_no_system_prompt() -> None:
+    """Covers Ollama chat without system_prompt (no system message prepended)."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        assert payload["messages"][0]["role"] == "user"
+        return httpx.Response(200, json={"message": {"content": "ok"}})
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    config = AIConfig(enabled=True, provider="ollama")
+    provider = OllamaProvider(config, http_client=http_client)
+
+    result = await provider.chat([{"role": "user", "content": "hello"}])
+    assert result == "ok"
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_ollama_stream_no_system_prompt() -> None:
+    """Covers Ollama stream_chat without system_prompt."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        assert payload["messages"][0]["role"] == "user"
+        content = "\n".join([
+            json.dumps({"message": {"content": "hi"}, "done": True}),
+            "",
+        ])
+        return httpx.Response(200, content=content.encode("utf-8"))
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    config = AIConfig(enabled=True, provider="ollama")
+    provider = OllamaProvider(config, http_client=http_client)
+
+    parts: list[str] = []
+    async for chunk in provider.stream_chat([{"role": "user", "content": "hello"}]):
+        parts.append(chunk)
+    assert parts == ["hi"]
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_claude_stream_filters_system_messages() -> None:
+    """Covers line 188: 'continue' when system role encountered in stream_chat."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        # system messages should be filtered out from content_messages
+        assert all(m["role"] in ("user", "assistant") for m in payload["messages"])
+        content = "\n".join([
+            "data: " + json.dumps({"type": "content_block_delta", "delta": {"text": "ok"}}),
+            "data: " + json.dumps({"type": "message_stop"}),
+            "",
+        ])
+        return httpx.Response(200, content=content.encode("utf-8"))
+
+    transport = httpx.MockTransport(handler)
+    http_client = httpx.AsyncClient(transport=transport)
+    config = AIConfig(enabled=True, provider="claude", api_key="key")
+    provider = ClaudeProvider(config, http_client=http_client)
+
+    parts: list[str] = []
+    async for chunk in provider.stream_chat(
+        [
+            {"role": "system", "content": "should be filtered"},
+            {"role": "user", "content": "hello"},
+        ],
+    ):
+        parts.append(chunk)
+    assert parts == ["ok"]
+    await http_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_mock_provider_stream_with_response() -> None:
+    """Covers line 337: MockProvider stream_chat yields response when non-empty."""
+    config = AIConfig(enabled=True, provider="mock")
+    provider = MockProvider(config, response="streamed")
+
+    parts: list[str] = []
+    async for chunk in provider.stream_chat([{"role": "user", "content": "hello"}]):
+        parts.append(chunk)
+    assert parts == ["streamed"]
+    await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_create_provider_unsupported() -> None:
+    """Covers line 446: _create_provider raises on unsupported provider."""
+    config = AIConfig(enabled=True, provider="openai")
+    ai_client = AIClient(config)
+    # Directly test _create_provider with a bad provider value
+    bad_config = AIConfig(enabled=True, provider="openai")
+    bad_config.__dict__["provider"] = "unsupported"
+    with pytest.raises(AIProviderError, match="Unsupported"):
+        ai_client._create_provider(bad_config)
+    await ai_client.close()
+
+
+@pytest.mark.asyncio
+async def test_prune_cache_removes_expired_on_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Covers line 495: _prune_cache_locked removes expired entries during set."""
+    import nonebot_plugin_dst_management.ai.client as ai_client_module
+
+    config = AIConfig(enabled=True, provider="mock", cache_ttl=10)
+    provider = MockProvider(config, response="x")
+    ai_client = AIClient(config, provider=provider)
+
+    # Manually insert an expired cache entry
+    ai_client._cache["old_key"] = (0.0, "expired_value")
+
+    # Set monotonic to a time that makes old_key expired but new entries valid
+    monkeypatch.setattr(ai_client_module.time, "monotonic", lambda: 100.0)
+
+    # This triggers _set_cached_response -> _prune_cache_locked which removes old_key
+    ai_client._set_cached_response("new_key", "new_value")
+
+    assert "old_key" not in ai_client._cache
+    assert "new_key" in ai_client._cache
+    await ai_client.close()
