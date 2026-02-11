@@ -1,6 +1,6 @@
 from nonebot.adapters.onebot.v11 import Message
 
-from nonebot_plugin_dst_management.handlers.archive import _extract_room_and_source, _format_archive_info
+from nonebot_plugin_dst_management.commands.archive import _extract_room_and_source, _format_archive_info
 from nonebot_plugin_dst_management.services.archive_service import ArchiveInfo
 
 

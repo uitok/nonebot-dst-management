@@ -34,13 +34,18 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None) -> None
     _ai_client = ai_client
 
     # 核心命令（仅需 api_client）
-    from . import room, console, player, backup, help as help_cmd, config_ui
+    from . import room, console, player, backup, help as help_cmd, config_ui, archive
     room.init(api_client)
     console.init(api_client)
     player.init(api_client)
     backup.init(api_client)
+    archive.init(api_client)
     help_cmd.init()
     config_ui.init()
+
+    # 需要 api_client（+ 可选 ai_client）的命令
+    from . import mod
+    mod.init(api_client, ai_client)
 
     # AI 命令（需要 api_client + ai_client）
     if ai_client is not None:

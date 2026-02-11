@@ -14,6 +14,8 @@ Alconna 命令模块 (on_alconna 架构)
 - AI 模组推荐 (mod recommend)
 - AI 模组解析 (mod parse)
 - 备份管理命令 (backup list, create, restore)
+- 模组管理命令 (mod search, list, add, remove, check, config save)
+- 存档管理命令 (archive upload, download, replace, validate)
 """
 
 from .base import (
@@ -97,6 +99,40 @@ from .backup import (
     handle_backup_create,
     handle_backup_restore,
 )
+from .mod import (
+    mod_search_command,
+    mod_list_command,
+    mod_add_command,
+    mod_remove_command,
+    mod_check_command,
+    mod_config_save_command,
+    mod_search_matcher,
+    mod_list_matcher,
+    mod_add_matcher,
+    mod_remove_matcher,
+    mod_check_matcher,
+    mod_config_save_matcher,
+    handle_mod_search,
+    handle_mod_list,
+    handle_mod_add,
+    handle_mod_remove,
+    handle_mod_check,
+    handle_mod_config_save,
+)
+from .archive import (
+    archive_upload_command,
+    archive_download_command,
+    archive_replace_command,
+    archive_validate_command,
+    archive_upload_matcher,
+    archive_download_matcher,
+    archive_replace_matcher,
+    archive_validate_matcher,
+    handle_archive_upload,
+    handle_archive_download,
+    handle_archive_replace,
+    handle_archive_validate,
+)
 
 __all__ = [
     # Base
@@ -169,4 +205,36 @@ __all__ = [
     "handle_backup_list",
     "handle_backup_create",
     "handle_backup_restore",
+    # Mod commands
+    "mod_search_command",
+    "mod_list_command",
+    "mod_add_command",
+    "mod_remove_command",
+    "mod_check_command",
+    "mod_config_save_command",
+    "mod_search_matcher",
+    "mod_list_matcher",
+    "mod_add_matcher",
+    "mod_remove_matcher",
+    "mod_check_matcher",
+    "mod_config_save_matcher",
+    "handle_mod_search",
+    "handle_mod_list",
+    "handle_mod_add",
+    "handle_mod_remove",
+    "handle_mod_check",
+    "handle_mod_config_save",
+    # Archive commands
+    "archive_upload_command",
+    "archive_download_command",
+    "archive_replace_command",
+    "archive_validate_command",
+    "archive_upload_matcher",
+    "archive_download_matcher",
+    "archive_replace_matcher",
+    "archive_validate_matcher",
+    "handle_archive_upload",
+    "handle_archive_download",
+    "handle_archive_replace",
+    "handle_archive_validate",
 ]

@@ -1,6 +1,6 @@
 from nonebot.adapters.onebot.v11 import Message
 
-from nonebot_plugin_dst_management.handlers.mod import (
+from nonebot_plugin_dst_management.commands.mod import (
     _normalize_mod_id,
     _parse_mod_data,
     _format_mod_list,

@@ -73,6 +73,24 @@ def setup_nonebot_mock():
     sys.modules["nonebot.permission"] = mock_permission
     sys.modules["nonebot.rule"] = mock_rule
 
+    # Mock nonebot.internal.adapter (used by Alconna commands)
+    mock_internal = MagicMock()
+    mock_internal_adapter = MagicMock()
+    sys.modules["nonebot.internal"] = mock_internal
+    sys.modules["nonebot.internal.adapter"] = mock_internal_adapter
+
+    # Mock arclet.alconna (Alconna command framework)
+    mock_arclet = MagicMock()
+    mock_arclet_alconna = MagicMock()
+    sys.modules["arclet"] = mock_arclet
+    sys.modules["arclet.alconna"] = mock_arclet_alconna
+
+    # Mock nonebot_plugin_alconna
+    mock_npa = MagicMock()
+    # on_alconna should return a DummyCommand-like object
+    mock_npa.on_alconna = lambda *args, **kwargs: DummyCommand()
+    sys.modules["nonebot_plugin_alconna"] = mock_npa
+
     # Mock Message 类为简单可用对象
     class DummyMessage:
         __name__ = "Message"
