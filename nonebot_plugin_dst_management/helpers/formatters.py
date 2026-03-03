@@ -241,26 +241,28 @@ def format_progress(current: int, total: int, width: int = 10) -> str:
 # =========================
 # Feedback message helpers
 # =========================
+# NOTE: These functions return str for multi-adapter compatibility.
+# For OneBot v11, wrap with Message() if needed by the caller.
 
 
-def format_loading(message: str = "处理中...") -> Message:
-    return Message(f"{ICON_LOADING} {message}")
+def format_loading(message: str = "处理中...") -> str:
+    return f"{ICON_LOADING} {message}"
 
 
-def format_error(message: str) -> Message:
-    return Message(f"{ICON_ERROR} {message}")
+def format_error(message: str) -> str:
+    return f"{ICON_ERROR} {message}"
 
 
-def format_success(message: str) -> Message:
-    return Message(f"{ICON_SUCCESS} {message}")
+def format_success(message: str) -> str:
+    return f"{ICON_SUCCESS} {message}"
 
 
-def format_info(message: str) -> Message:
-    return Message(f"{ICON_INFO} {message}")
+def format_info(message: str) -> str:
+    return f"{ICON_INFO} {message}"
 
 
-def format_warning(message: str) -> Message:
-    return Message(f"{ICON_WARNING} {message}")
+def format_warning(message: str) -> str:
+    return f"{ICON_WARNING} {message}"
 
 
 # =========================
@@ -282,7 +284,7 @@ def format_room_list(
     page: int,
     total_pages: int,
     total: int,
-) -> Message:
+) -> str:
     lines: List[str] = [
         f"{ICON_ROOM} DST 房间列表",
         f"第 {page}/{total_pages} 页 | 共 {total} 个房间",
@@ -311,7 +313,7 @@ def format_room_list(
     lines.append(f"{ICON_TIP} 使用 /dst info <房间ID> 查看详情")
     if page < total_pages:
         lines.append(f"{ICON_TIP} 使用 /dst list {page + 1} 查看下一页")
-    return Message("\n".join(lines).strip())
+    return "\n".join(lines).strip()
 
 
 def format_room_detail(
@@ -359,15 +361,15 @@ def format_room_detail(
         if mod_count > 0:
             lines.append(f"{ICON_MOD} 已安装模组：{mod_count}个")
 
-    return Message("\n".join(lines).strip())
+    return "\n".join(lines).strip()
 
 
-def format_players(room_name: str, players: List[Dict[str, Any]]) -> Message:
+def format_players(room_name: str, players: List[Dict[str, Any]]) -> str:
     lines: List[str] = [f"{ICON_PLAYER} 在线玩家 ({room_name})", ""]
 
     if not players:
         lines.append(f"{ICON_EMPTY} 当前没有玩家在线")
-        return Message("\n".join(lines).strip())
+        return "\n".join(lines).strip()
 
     for idx, player in enumerate(players, 1):
         head, pad = _tree_prefix(idx, len(players))
@@ -382,21 +384,21 @@ def format_players(room_name: str, players: List[Dict[str, Any]]) -> Message:
 
     lines.append("")
     lines.append(f"共 {len(players)} 名玩家在线")
-    return Message("\n".join(lines).strip())
+    return "\n".join(lines).strip()
 
 
-def format_player_list(room_name: str, players: List[Dict[str, Any]]) -> Message:
+def format_player_list(room_name: str, players: List[Dict[str, Any]]) -> str:
     """Compatibility wrapper."""
 
     return format_players(room_name, players)
 
 
-def format_backups(room_name: str, backups: List[Dict[str, Any]]) -> Message:
+def format_backups(room_name: str, backups: List[Dict[str, Any]]) -> str:
     lines: List[str] = [f"{ICON_BACKUP} 备份列表 ({room_name})", ""]
 
     if not backups:
         lines.append(f"{ICON_EMPTY} 暂无备份")
-        return Message("\n".join(lines).strip())
+        return "\n".join(lines).strip()
 
     for idx, backup in enumerate(backups[:20], 1):
         head, pad = _tree_prefix(idx, min(len(backups), 20))
@@ -428,20 +430,20 @@ def format_backups(room_name: str, backups: List[Dict[str, Any]]) -> Message:
 
     lines.append("")
     lines.append(f"{ICON_TIP} 使用 /dst backup restore <房间ID> <文件名> 恢复备份")
-    return Message("\n".join(lines).strip())
+    return "\n".join(lines).strip()
 
 
-def format_backup_list(room_name: str, backups: List[Dict[str, Any]]) -> Message:
+def format_backup_list(room_name: str, backups: List[Dict[str, Any]]) -> str:
     """Compatibility wrapper."""
 
     return format_backups(room_name, backups)
 
 
-def format_table(headers: List[str], rows: List[List[Any]]) -> Message:
+def format_table(headers: List[str], rows: List[List[Any]]) -> str:
     """Render a simple fixed-width table for text messages."""
 
     if not headers:
-        return Message("")
+        return ""
 
     str_headers = [str(h) for h in headers]
     str_rows = [[str(cell) for cell in row] for row in (rows or [])]
@@ -461,7 +463,7 @@ def format_table(headers: List[str], rows: List[List[Any]]) -> Message:
     lines = [fmt_row(str_headers), "-+-".join("-" * w for w in widths)]
     for row in str_rows:
         lines.append(fmt_row(row))
-    return Message("\n".join(lines))
+    return "\n".join(lines)
 
 
 # =========================
