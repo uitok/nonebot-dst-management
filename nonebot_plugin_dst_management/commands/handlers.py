@@ -54,6 +54,15 @@ def init(api_client: DSTApiClient, ai_client: Optional[AIClient] = None) -> None
         ai_recommend.init(api_client, ai_client)
         ai_mod_parse.init(api_client, ai_client)
 
+    # 签到和默认房间命令（仅需 api_client）
+    from . import sign, default_room
+    sign.init(api_client)
+    default_room.init(api_client)
+
+    # 自动发现命令（无需客户端）
+    from . import auto_discovery
+    auto_discovery.init()
+
 
 __all__ = [
     "init",

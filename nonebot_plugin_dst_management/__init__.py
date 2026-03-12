@@ -163,7 +163,7 @@ async def init_client():
 
     # ========== Alconna 命令 (on_alconna 架构) ==========
     # 已迁移至 commands/ 模块：room, console, player, help, config_ui,
-    # backup, ai_analyze, ai_recommend, ai_mod_parse
+    # backup, ai_analyze, ai_recommend, ai_mod_parse, sign, default_room, auto_discovery
     from .commands import handlers as alconna_handlers
     alconna_handlers.init(_api_client, _ai_client)
 
@@ -174,9 +174,6 @@ async def init_client():
         ai_mod_apply,
         ai_archive,
         ai_qa,
-        default_room,
-        sign,
-        auto_discovery,
     )
 
     # 初始化签到监视器（触发式，无后台任务）
@@ -190,9 +187,6 @@ async def init_client():
     ai_mod_apply.init(_api_client, _ai_client)
     ai_archive.init(_api_client)
     ai_qa.init(_api_client)
-    default_room.init(_api_client, _ai_client)
-    sign.init(_api_client)
-    auto_discovery.init()
 
 
 @driver.on_shutdown

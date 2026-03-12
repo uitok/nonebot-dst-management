@@ -16,6 +16,9 @@ Alconna 命令模块 (on_alconna 架构)
 - 备份管理命令 (backup list, create, restore)
 - 模组管理命令 (mod search, list, add, remove, check, config save)
 - 存档管理命令 (archive upload, download, replace, validate)
+- 签到命令 (sign bind, sign unbind, sign)
+- 默认房间命令 (默认房间, 清除默认, 查看默认)
+- 自动发现命令 (room scan, room import)
 """
 
 from .base import (
@@ -133,6 +136,36 @@ from .archive import (
     handle_archive_replace,
     handle_archive_validate,
 )
+from .sign import (
+    sign_bind_command,
+    sign_unbind_command,
+    sign_command,
+    sign_bind_matcher,
+    sign_unbind_matcher,
+    sign_matcher,
+    handle_sign_bind,
+    handle_sign_unbind,
+    handle_sign,
+)
+from .default_room import (
+    set_default_room_command,
+    clear_default_room_command,
+    show_default_room_command,
+    set_default_room_matcher,
+    clear_default_room_matcher,
+    show_default_room_matcher,
+    handle_set_default_room,
+    handle_clear_default_room,
+    handle_show_default_room,
+)
+from .auto_discovery import (
+    scan_command,
+    import_command,
+    scan_matcher,
+    import_matcher,
+    handle_scan,
+    handle_import,
+)
 
 __all__ = [
     # Base
@@ -237,4 +270,31 @@ __all__ = [
     "handle_archive_download",
     "handle_archive_replace",
     "handle_archive_validate",
+    # Sign commands
+    "sign_bind_command",
+    "sign_unbind_command",
+    "sign_command",
+    "sign_bind_matcher",
+    "sign_unbind_matcher",
+    "sign_matcher",
+    "handle_sign_bind",
+    "handle_sign_unbind",
+    "handle_sign",
+    # Default room commands
+    "set_default_room_command",
+    "clear_default_room_command",
+    "show_default_room_command",
+    "set_default_room_matcher",
+    "clear_default_room_matcher",
+    "show_default_room_matcher",
+    "handle_set_default_room",
+    "handle_clear_default_room",
+    "handle_show_default_room",
+    # Auto discovery commands
+    "scan_command",
+    "import_command",
+    "scan_matcher",
+    "import_matcher",
+    "handle_scan",
+    "handle_import",
 ]
